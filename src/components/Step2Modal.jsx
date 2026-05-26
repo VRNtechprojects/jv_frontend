@@ -1,9 +1,7 @@
-import React, { useState } from "react";
-import { useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { toast } from "react-toastify";
 import api from "../api.js";
 import RemarksSection from "./Remarkssection.jsx";
-
 
 const FILE_FIELDS = [
   { key: "aks", label: "Aks", colIndex: 14 },
@@ -19,10 +17,18 @@ export default function Step2Modal({ show, lead, onClose, onSuccess }) {
   const [progress, setProgress] = useState("");
   const remarksRef = useRef(null);
 
+  // ✅ Reset all local state when a different lead is opened
+  useEffect(() => {
+    if (lead) {
+      setMapLocation("");
+      setFiles({});
+      setProgress("");
+    }
+  }, [lead?.enqNo]);
+
   if (!show || !lead) return null;
 
   const handleFileChange = (key, fileList) => {
-    // Support multiple files
     setFiles((prev) => ({ ...prev, [key]: fileList }));
   };
 
@@ -39,10 +45,14 @@ export default function Step2Modal({ show, lead, onClose, onSuccess }) {
   };
 
   const handleSubmit = async () => {
-    const selectedFiles = Object.entries(files).filter(([_, fileList]) => fileList && fileList.length > 0);
-    
+    const selectedFiles = Object.entries(files).filter(
+      ([_, fileList]) => fileList && fileList.length > 0,
+    );
+
     if (selectedFiles.length === 0 && !mapLocation.trim()) {
-      toast.warn("Please provide Map Location link or upload at least one file");
+      toast.warn(
+        "Please provide Map Location link or upload at least one file",
+      );
       return;
     }
 
@@ -69,11 +79,12 @@ export default function Step2Modal({ show, lead, onClose, onSuccess }) {
       for (let i = 0; i < selectedFiles.length; i++) {
         const [key, fileList] = selectedFiles[i];
         const fieldInfo = FILE_FIELDS.find((f) => f.key === key);
-        
-        // Upload all files for this field
+
         for (let j = 0; j < fileList.length; j++) {
           const file = fileList[j];
-          setProgress(`Uploading ${fieldInfo.label} (${j + 1}/${fileList.length})...`);
+          setProgress(
+            `Uploading ${fieldInfo.label} (${j + 1}/${fileList.length})...`,
+          );
 
           const base64 = await fileToBase64(file);
 
@@ -89,16 +100,20 @@ export default function Step2Modal({ show, lead, onClose, onSuccess }) {
       }
 
       toast.success("Documents uploaded successfully!");
+
       // Save remark if entered
-const remarkText = remarksRef.current?.getRemarkText();
-if (remarkText && remarkText.trim()) {
-  await remarksRef.current.saveRemark(remarkText);
-}
+      const remarkText = remarksRef.current?.getRemarkText();
+      if (remarkText && remarkText.trim()) {
+        await remarksRef.current.saveRemark(remarkText);
+      }
+
       onSuccess?.();
       onClose();
     } catch (err) {
       console.error("Upload error:", err);
-      toast.error("Upload failed: " + (err.response?.data?.error || err.message));
+      toast.error(
+        "Upload failed: " + (err.response?.data?.error || err.message),
+      );
     } finally {
       setUploading(false);
       setProgress("");
@@ -113,7 +128,10 @@ if (remarkText && remarkText.trim()) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content step2-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-content step2-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h3>
             <i className="bi bi-cloud-upload" style={{ marginRight: 8 }}></i>
@@ -153,7 +171,7 @@ if (remarkText && remarkText.trim()) {
             </select>
           </div>
 
-          {/* Map Location - Text Input */}
+          {/* Map Location */}
           <div className="form-group">
             <label>
               <i className="bi bi-geo-alt" style={{ marginRight: 6 }}></i>
@@ -183,11 +201,16 @@ if (remarkText && remarkText.trim()) {
                   <input
                     type="file"
                     multiple
-                    onChange={(e) => handleFileChange(field.key, e.target.files)}
+                    onChange={(e) =>
+                      handleFileChange(field.key, e.target.files)
+                    }
                     disabled={uploading}
                     id={`file-${field.key}`}
                   />
-                  <label htmlFor={`file-${field.key}`} className="file-input-btn">
+                  <label
+                    htmlFor={`file-${field.key}`}
+                    className="file-input-btn"
+                  >
                     <i className="bi bi-upload"></i>
                     {getFileNames(files[field.key])}
                   </label>
@@ -213,14 +236,27 @@ if (remarkText && remarkText.trim()) {
             </div>
           )}
 
-          <RemarksSection ref={remarksRef} enqNo={lead.enqNo} stepName="Step 2: Document Upload" disabled={uploading} />
+          <RemarksSection
+            ref={remarksRef}
+            enqNo={lead.enqNo}
+            stepName="Step 2: Document Upload"
+            disabled={uploading}
+          />
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-cancel" onClick={onClose} disabled={uploading}>
+          <button
+            className="btn btn-cancel"
+            onClick={onClose}
+            disabled={uploading}
+          >
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading}>
+          <button
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={uploading}
+          >
             {uploading ? (
               <>
                 <span className="spinner-small"></span> Uploading...
