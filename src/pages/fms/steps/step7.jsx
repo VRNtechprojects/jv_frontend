@@ -16,6 +16,13 @@ const STEP7_COLUMNS = [
   { key: "step7Planned", label: "Planned Date" },
 ];
 
+// ✅ NEW: Status options for Step 7
+const STATUS_OPTIONS = [
+  { value: "Done", label: "Done — Move to DONE", icon: "bi-check-circle", color: "#22c55e" },
+  { value: "Cold Lead", label: "Cold Lead", icon: "bi-snow2", color: "#3b82f6" },
+  { value: "Not Qualified Lead", label: "Not Qualified", icon: "bi-x-circle", color: "#ef4444" },
+];
+
 function getPreviewFiles(lead) {
   const files = [];
   if (lead.aks) files.push({ label: "AKS", link: lead.aks });
@@ -34,6 +41,14 @@ function getPreviewFiles(lead) {
 }
 
 const styles = {
+statusOption: {
+  display: "flex", alignItems: "center", justifyContent: "center",
+  gap: "8px", padding: "12px 16px", borderRadius: "8px",
+  border: "2px solid var(--border-primary, #e5e7eb)",
+  backgroundColor: "var(--bg-primary, #ffffff)",
+  cursor: "pointer", fontSize: "14px", fontWeight: 500,
+  color: "var(--text-secondary, #6b7280)", transition: "all 0.2s",
+},
   modalOverlay: {
     position: "fixed",
     top: 0,
@@ -225,23 +240,33 @@ const styles = {
 const spinnerKeyframes = `@keyframes spin { to { transform: rotate(360deg); } }`;
 
 function Step7Modal({ show, lead, onClose, onSuccess }) {
+  const [status, setStatus] = useState("");
   const [plannedOverride, setPlannedOverride] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const remarksRef = React.useRef(null);
 
   if (!show || !lead) return null;
 
-  const handleSubmitDone = async () => {
-    const confirmMsg =
-      "This will mark the lead as Done and move it to the DONE sheet. Continue?";
-    if (!window.confirm(confirmMsg)) return;
+  const handleSubmit = async () => {
+    if (!status && !plannedOverride.trim()) {
+      toast.warn("Please select a status or update planned date");
+      return;
+    }
+
+    // Confirm for all actions
+    if (status === "Done") {
+      if (!window.confirm("This will mark the lead as Done and move it to the DONE sheet. Continue?")) return;
+    } else if (status === "Cold Lead" || status === "Not Qualified Lead") {
+      const dest = status === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads";
+      if (!window.confirm(`Move this lead to ${dest}? This will remove it permanently.`)) return;
+    }
 
     setSubmitting(true);
     try {
       const res = await api.post("/fms/step7/update", {
         rowIndex: lead.rowIndex,
         enqNo: lead.enqNo,
-        status: "Done",
+        status: status || null,
         plannedOverride: plannedOverride.trim() || null,
       });
       if (res.data.success) {
@@ -256,17 +281,29 @@ function Step7Modal({ show, lead, onClose, onSuccess }) {
         throw new Error(res.data.error || "Update failed");
       }
     } catch (err) {
-      toast.error(
-        "Update failed: " + (err.response?.data?.error || err.message),
-      );
+      toast.error("Update failed: " + (err.response?.data?.error || err.message));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleClose = () => {
+    setStatus("");
     setPlannedOverride("");
     onClose();
+  };
+
+  const getStatusButtonStyle = (opt) => {
+    const isSelected = status === opt.value;
+    return {
+      ...styles.statusOption,
+      ...(isSelected && {
+        borderColor: opt.color,
+        backgroundColor: opt.color,
+        color: "#ffffff",
+      }),
+      ...(submitting && styles.btnDisabled),
+    };
   };
 
   return (
@@ -279,12 +316,8 @@ function Step7Modal({ show, lead, onClose, onSuccess }) {
               <i className="bi bi-handshake"></i>Step 7: Agreement
             </h3>
             <button
-              style={{
-                ...styles.closeBtn,
-                ...(submitting && styles.btnDisabled),
-              }}
-              onClick={handleClose}
-              disabled={submitting}
+              style={{ ...styles.closeBtn, ...(submitting && styles.btnDisabled) }}
+              onClick={handleClose} disabled={submitting}
             >
               &times;
             </button>
@@ -311,12 +344,7 @@ function Step7Modal({ show, lead, onClose, onSuccess }) {
                 <div style={styles.infoRowLast}>
                   <span style={styles.infoLabel}>Folder:</span>
                   <span style={styles.infoValue}>
-                    <a
-                      href={lead.pdfFolder}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={styles.folderLink}
-                    >
+                    <a href={lead.pdfFolder} target="_blank" rel="noopener noreferrer" style={styles.folderLink}>
                       <i className="bi bi-folder2-open"></i> Open Drive Folder
                     </a>
                   </span>
@@ -324,44 +352,41 @@ function Step7Modal({ show, lead, onClose, onSuccess }) {
               )}
             </div>
 
+            {/* ✅ Status Selection with toggleable buttons */}
             <div style={styles.formGroup}>
               <label style={styles.label}>
                 <i className="bi bi-flag"></i>Status
               </label>
-              <div style={styles.statusOptions}>
-                <button
-                  type="button"
-                  style={{
-                    ...styles.statusOptionDone,
-                    ...(submitting && styles.btnDisabled),
-                  }}
-                  disabled={submitting}
-                >
-                  <i className="bi bi-check-circle"></i>Done — Move to DONE
-                </button>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
+                {STATUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    style={getStatusButtonStyle(opt)}
+                    onClick={() => setStatus(status === opt.value ? "" : opt.value)}
+                    disabled={submitting}
+                  >
+                    <i className={`bi ${opt.icon}`}></i>
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
+
             <div style={styles.formGroup}>
               <label style={styles.label}>
-                <i className="bi bi-calendar-event"></i>Planned Date Override
-                (Optional)
+                <i className="bi bi-calendar-event"></i>Planned Date Override (Optional)
               </label>
               <input
                 type="datetime-local"
-                style={{
-                  ...styles.formInput,
-                  ...(submitting && styles.btnDisabled),
-                }}
+                style={{ ...styles.formInput, ...(submitting && styles.btnDisabled) }}
                 value={plannedOverride}
                 onChange={(e) => setPlannedOverride(e.target.value)}
                 disabled={submitting}
               />
-              <small style={styles.formHint}>
-                Leave empty to keep current planned date
-              </small>
+              <small style={styles.formHint}>Leave empty to keep current planned date</small>
             </div>
 
-            {/* Remarks Section */}
             <RemarksSection
               ref={remarksRef}
               enqNo={lead.enqNo}
@@ -369,42 +394,52 @@ function Step7Modal({ show, lead, onClose, onSuccess }) {
               disabled={submitting}
             />
 
-            <div style={styles.infoBox}>
-              <i className="bi bi-info-circle" style={styles.infoIcon}></i>
-              <span>
-                Marking as Done will move this lead to the <strong>DONE</strong>{" "}
-                sheet permanently.
-              </span>
-            </div>
+            {/* Info box for Done */}
+            {status === "Done" && (
+              <div style={styles.infoBox}>
+                <i className="bi bi-info-circle" style={styles.infoIcon}></i>
+                <span>Marking as Done will move this lead to the <strong>DONE</strong> sheet permanently.</span>
+              </div>
+            )}
+
+            {/* Warning for move actions */}
+            {(status === "Cold Lead" || status === "Not Qualified Lead") && (
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: "10px",
+                padding: "12px 16px",
+                backgroundColor: "rgba(234, 179, 8, 0.1)",
+                border: "1px solid rgba(234, 179, 8, 0.3)",
+                borderRadius: "8px", marginTop: "16px",
+                color: "#b45309", fontSize: "14px",
+              }}>
+                <i className="bi bi-exclamation-triangle" style={{ fontSize: "18px", flexShrink: 0, marginTop: "2px" }}></i>
+                <span>
+                  This will move the lead to{" "}
+                  <strong>{status === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads"}</strong> and remove it permanently.
+                </span>
+              </div>
+            )}
           </div>
 
           <div style={styles.modalFooter}>
             <button
-              style={{
-                ...styles.btnCancel,
-                ...(submitting && styles.btnDisabled),
-              }}
-              onClick={handleClose}
-              disabled={submitting}
+              style={{ ...styles.btnCancel, ...(submitting && styles.btnDisabled) }}
+              onClick={handleClose} disabled={submitting}
             >
               Cancel
             </button>
             <button
               style={{
                 ...styles.btnPrimary,
-                ...(submitting && styles.btnDisabled),
+                ...((submitting || (!status && !plannedOverride)) && styles.btnDisabled),
               }}
-              onClick={handleSubmitDone}
-              disabled={submitting}
+              onClick={handleSubmit}
+              disabled={submitting || (!status && !plannedOverride)}
             >
               {submitting ? (
-                <>
-                  <span style={styles.spinnerSmall}></span>Moving...
-                </>
+                <><span style={styles.spinnerSmall}></span>Processing...</>
               ) : (
-                <>
-                  <i className="bi bi-check-lg"></i>Mark as Done
-                </>
+                <><i className="bi bi-check-lg"></i>Submit</>
               )}
             </button>
           </div>
@@ -448,9 +483,11 @@ export default function Step7({ currentUser, onNextAction }) {
     setShowPreview(true);
   };
   const handleSuccess = () => {
-    queryClient.invalidateQueries(["fms-step7"]);
-    queryClient.invalidateQueries(["done"]);
-  };
+  queryClient.invalidateQueries(["fms-step7"]);
+  queryClient.invalidateQueries(["done"]);
+  queryClient.invalidateQueries(["cold-leads"]);
+  queryClient.invalidateQueries(["not-qualified"]);
+};
 
   return (
     <div className="step-content">

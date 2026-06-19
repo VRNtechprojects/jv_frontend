@@ -25,6 +25,20 @@ const STATUS_OPTIONS = [
     icon: "bi-arrow-clockwise",
     color: "#f59e0b",
   },
+  { value: "Hold", label: "Hold", icon: "bi-pause-circle", color: "#ef4444" },
+  { value: "Hold", label: "Hold", icon: "bi-pause-circle", color: "#ef4444" },
+  {
+    value: "Cold Lead",
+    label: "Cold Lead",
+    icon: "bi-snow2",
+    color: "#3b82f6",
+  },
+  {
+    value: "Not Qualified Lead",
+    label: "Not Qualified",
+    icon: "bi-x-circle",
+    color: "#dc2626",
+  },
 ];
 
 function getPreviewFiles(lead) {
@@ -283,6 +297,18 @@ function Step6Modal({ show, lead, onClose, onSuccess }) {
       return;
     }
 
+    // ✅ Confirm for move actions
+    if (status === "Cold Lead" || status === "Not Qualified Lead") {
+      const dest =
+        status === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads";
+      if (
+        !window.confirm(
+          `Move this lead to ${dest}? This will remove it permanently.`,
+        )
+      )
+        return;
+    }
+
     setSubmitting(true);
     try {
       const res = await api.post("/fms/step6/update", {
@@ -487,6 +513,37 @@ function Step6Modal({ show, lead, onClose, onSuccess }) {
               stepName="Step 6: Follow Up"
               disabled={submitting}
             />
+            {/* ✅ Warning for move actions */}
+            {(status === "Cold Lead" || status === "Not Qualified Lead") && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  padding: "12px 16px",
+                  backgroundColor: "rgba(234, 179, 8, 0.1)",
+                  border: "1px solid rgba(234, 179, 8, 0.3)",
+                  borderRadius: "8px",
+                  marginTop: "16px",
+                  color: "#b45309",
+                  fontSize: "14px",
+                }}
+              >
+                <i
+                  className="bi bi-exclamation-triangle"
+                  style={{ fontSize: "18px", flexShrink: 0, marginTop: "2px" }}
+                ></i>
+                <span>
+                  This will move the lead to{" "}
+                  <strong>
+                    {status === "Cold Lead"
+                      ? "Cold Leads"
+                      : "Not Qualified Leads"}
+                  </strong>{" "}
+                  and remove it permanently.
+                </span>
+              </div>
+            )}
           </div>
 
           <div style={styles.modalFooter}>
@@ -562,6 +619,9 @@ export default function Step6({ currentUser, onNextAction }) {
   const handleSuccess = () => {
     queryClient.invalidateQueries(["fms-step6"]);
     queryClient.invalidateQueries(["fms-step7"]);
+    queryClient.invalidateQueries(["fms-proposal-hold"]);
+    queryClient.invalidateQueries(["cold-leads"]);
+    queryClient.invalidateQueries(["not-qualified"]);
   };
 
   const followCounterBadgeStyle = {

@@ -4,18 +4,20 @@ import Step3 from "./fms/steps/Step3.jsx";
 import Step4 from "./fms/steps/step4.jsx";
 import Step5 from "./fms/steps/Step5.jsx";
 import Step6 from "./fms/steps/step6.jsx";
+import ProposalHold from "./fms/steps/ProposalHold.jsx";  // ✅ NEW IMPORT
 import Step7 from "./fms/steps/step7.jsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api.js";
 import Step1 from "./fms/steps/Step1.jsx";
 
-// ✅ ONLY LABELS CHANGED (IDs SAME - IMPORTANT)
+// ✅ UPDATED: Added Proposal Hold between Follow Up and Agreement
 const FMS_STEPS = [
   { id: 2, label: "Document Upload", icon: "bi-cloud-upload" },
   { id: 3, label: "Need Analysis Meeting", icon: "bi-people" },
-  { id: 4, label: "Proposal Preparation ", icon: "bi-clipboard-data" },
+  { id: 4, label: "Proposal Preparation", icon: "bi-clipboard-data" },
   { id: 5, label: "Proposal Meeting", icon: "bi-file-earmark-check" },
   { id: 6, label: "Follow Up", icon: "bi-arrow-repeat" },
+  { id: 8, label: "Proposal Hold", icon: "bi-pause-circle" },  // ✅ NEW (id: 8)
   { id: 7, label: "Agreement", icon: "bi-handshake" },
 ];
 
@@ -31,14 +33,12 @@ const STEP2_COLUMNS = [
 ];
 
 export default function FMSPage({ currentUser, onNextAction }) {
-  // ✅ Default = All Leads
   const [activeStep, setActiveStep] = useState(1);
   const [selectedLead, setSelectedLead] = useState(null);
   const [showStep2Modal, setShowStep2Modal] = useState(false);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
 
-  // ⚠️ SAME API (no backend change)
   const { data: step2Data, isLoading: step2Loading, error: step2Error } = useQuery({
     queryKey: ["fms-step2"],
     queryFn: () => api.get("/fms/step2").then((r) => r.data),
@@ -72,7 +72,7 @@ export default function FMSPage({ currentUser, onNextAction }) {
   const renderStepContent = () => {
     switch (activeStep) {
       case 1:
-        return <Step1 currentUser={currentUser} />; // ✅ All Leads
+        return <Step1 currentUser={currentUser} />;
 
       case 2:
         return (
@@ -157,19 +157,19 @@ export default function FMSPage({ currentUser, onNextAction }) {
 
       case 3:
         return <Step3 currentUser={currentUser} onNextAction={onNextAction} />;
-
       case 4:
         return <Step4 currentUser={currentUser} onNextAction={onNextAction} />;
-
       case 5:
         return <Step5 currentUser={currentUser} onNextAction={onNextAction} />;
-
       case 6:
         return <Step6 currentUser={currentUser} onNextAction={onNextAction} />;
 
+      // ✅ NEW CASE
+      case 8:
+        return <ProposalHold currentUser={currentUser} onNextAction={onNextAction} />;
+
       case 7:
         return <Step7 currentUser={currentUser} onNextAction={onNextAction} />;
-
       default:
         return <div>No Step Found</div>;
     }
@@ -182,32 +182,33 @@ export default function FMSPage({ currentUser, onNextAction }) {
       </div>
 
       <div className="fms-sub-tabs">
-  {/* All Leads */}
-  <button
-    className={`fms-sub-tab ${activeStep === 1 ? "active" : ""}`}
-    onClick={() => {
-      setActiveStep(1);
-      setSearch("");
-    }}
-  >
-    <i className="bi bi-list"></i> All Leads
-  </button>
+        {/* All Leads */}
+        <button
+          className={`fms-sub-tab ${activeStep === 1 ? "active" : ""}`}
+          onClick={() => {
+            setActiveStep(1);
+            setSearch("");
+          }}
+        >
+          <i className="bi bi-list"></i> All Leads
+        </button>
 
-  {/* Steps with numbering */}
-  {FMS_STEPS.map((step, index) => (
-    <button
-      key={step.id}
-      className={`fms-sub-tab ${activeStep === step.id ? "active" : ""}`}
-      onClick={() => {
-        setActiveStep(step.id);
-        setSearch("");
-      }}
-    >
-      <i className={`bi ${step.icon}`} style={{ marginRight: 6 }}></i>
-      Step {index + 1}: {step.label}
-    </button>
-  ))}
-</div>
+        {/* Steps with numbering */}
+        {FMS_STEPS.map((step, index) => (
+          <button
+            key={step.id}
+            className={`fms-sub-tab ${activeStep === step.id ? "active" : ""}`}
+            onClick={() => {
+              setActiveStep(step.id);
+              setSearch("");
+            }}
+          >
+            <i className={`bi ${step.icon}`} style={{ marginRight: 6 }}></i>
+            {/* Proposal Hold doesn't get step number */}
+            {step.id === 8 ? step.label : `Step ${index + 1}: ${step.label}`}
+          </button>
+        ))}
+      </div>
 
       {renderStepContent()}
 

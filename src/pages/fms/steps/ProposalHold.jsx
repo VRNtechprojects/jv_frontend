@@ -5,7 +5,7 @@ import api from "../../../api.js";
 import FilePreviewModal from "../../../components/Filepreviewmodal.jsx";
 import RemarksSection from "../../../components/Remarkssection.jsx";
 
-const STEP5_COLUMNS = [
+const HOLD_COLUMNS = [
   { key: "enqNo", label: "EnQ No" },
   { key: "clientName", label: "Client Name" },
   { key: "partnerType", label: "Partner Type" },
@@ -13,25 +13,24 @@ const STEP5_COLUMNS = [
   { key: "location", label: "Location" },
   { key: "contactInfo", label: "Contact Info" },
   { key: "concernPerson", label: "Concern Person" },
-  { key: "step5Planned", label: "Planned Date" },
+  { key: "step6Planned", label: "Last Planned Date" },
+  { key: "step6FollowCounter", label: "Follow Up #" },
 ];
 
-// ✅ UPDATED: Added Cold Lead + Not Qualified options
-const STATUS_OPTIONS = [
-  { value: "Done", label: "Done", icon: "bi-check-circle", color: "#22c55e" },
+// ✅ 3 actions: Move to Follow Up, Cold Lead, Not Qualified
+const ACTION_OPTIONS = [
+  { value: "Move to Follow Up", label: "Move to Follow Up", icon: "bi-arrow-repeat", color: "#22c55e" },
   { value: "Cold Lead", label: "Cold Lead", icon: "bi-snow2", color: "#3b82f6" },
   { value: "Not Qualified Lead", label: "Not Qualified", icon: "bi-x-circle", color: "#ef4444" },
 ];
 
-function getAllPreviewFiles(lead) {
+function getPreviewFiles(lead) {
   const files = [];
   if (lead.aks) files.push({ label: "AKS", link: lead.aks });
   if (lead.khasra) files.push({ label: "Khasra", link: lead.khasra });
   if (lead.oldDocument) files.push({ label: "Old Document", link: lead.oldDocument });
   if (lead.landSurvey) files.push({ label: "Land Survey", link: lead.landSurvey });
-  if (lead.step4TypeOfProject) files.push({ label: "Type Of Project", link: lead.step4TypeOfProject });
   if (lead.step4CadFile) files.push({ label: "CAD File", link: lead.step4CadFile });
-  if (lead.step4CalcLink) files.push({ label: "Calculation Link", link: lead.step4CalcLink });
   return files;
 }
 
@@ -84,13 +83,24 @@ const styles = {
     display: "flex", alignItems: "center", gap: "6px",
     fontSize: "14px", fontWeight: 500,
   },
+  followCounterBadge: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    minWidth: "28px", height: "28px", padding: "0 10px",
+    backgroundColor: "#6366f1", color: "#ffffff",
+    borderRadius: "14px", fontSize: "13px", fontWeight: 600,
+  },
+  holdBadge: {
+    display: "inline-flex", alignItems: "center", gap: "6px",
+    padding: "6px 14px", backgroundColor: "rgba(239, 68, 68, 0.1)",
+    border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "8px",
+    color: "#ef4444", fontSize: "13px", fontWeight: 600,
+  },
   formGroup: { marginBottom: "20px" },
   label: {
     display: "flex", alignItems: "center", gap: "6px",
     fontSize: "14px", fontWeight: 500,
     color: "var(--text-primary, #111827)", marginBottom: "8px",
   },
-  // ✅ Changed from single column to 2-column grid
   statusOptions: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" },
   statusOption: {
     display: "flex", alignItems: "center", justifyContent: "center",
@@ -109,6 +119,11 @@ const styles = {
   formHint: {
     display: "block", fontSize: "12px",
     color: "var(--text-secondary, #6b7280)", marginTop: "6px",
+  },
+  followUpGroup: {
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    border: "1px solid rgba(34, 197, 94, 0.25)",
+    borderRadius: "8px", padding: "14px 16px", marginBottom: "20px",
   },
   warningBox: {
     display: "flex", alignItems: "flex-start", gap: "10px",
@@ -148,8 +163,9 @@ const styles = {
 
 const spinnerKeyframes = `@keyframes spin { to { transform: rotate(360deg); } }`;
 
-function Step5Modal({ show, lead, onClose, onSuccess }) {
-  const [status, setStatus] = useState("");
+// ============ MODAL COMPONENT ============
+function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
+  const [action, setAction] = useState("");
   const [plannedOverride, setPlannedOverride] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const remarksRef = React.useRef(null);
@@ -157,25 +173,26 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
   if (!show || !lead) return null;
 
   const handleSubmit = async () => {
-    if (!status && !plannedOverride.trim()) {
-      toast.warn("Please select a status or update planned date");
+    if (!action) {
+      toast.warn("Please select an action");
       return;
     }
 
-    // Confirm for move actions
-    if (status && status !== "Done") {
-      const dest = status === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads";
-      if (!window.confirm(`Move this lead to ${dest}? This will remove it from FMS.`)) return;
+    // Confirm for destructive actions
+    if (action === "Cold Lead" || action === "Not Qualified Lead") {
+      const dest = action === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads";
+      if (!window.confirm(`Move this lead to ${dest}? This will remove it permanently.`)) return;
     }
 
     setSubmitting(true);
     try {
-      const res = await api.post("/fms/step5/update", {
+      const res = await api.post("/fms/proposal-hold/update", {
         rowIndex: lead.rowIndex,
         enqNo: lead.enqNo,
-        status: status || null,
+        action,
         plannedOverride: plannedOverride.trim() || null,
       });
+
       if (res.data.success) {
         const remarkText = remarksRef.current?.getRemarkText() || "";
         if (remarkText.trim()) {
@@ -195,13 +212,13 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
   };
 
   const handleClose = () => {
-    setStatus("");
+    setAction("");
     setPlannedOverride("");
     onClose();
   };
 
-  const getStatusButtonStyle = (opt) => {
-    const isSelected = status === opt.value;
+  const getActionButtonStyle = (opt) => {
+    const isSelected = action === opt.value;
     return {
       ...styles.statusOption,
       ...(isSelected && {
@@ -220,7 +237,8 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
         <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
           <div style={styles.modalHeader}>
             <h3 style={styles.modalTitle}>
-              <i className="bi bi-file-earmark-check"></i>Step 5: Proposal Meeting
+              <i className="bi bi-pause-circle"></i>
+              Proposal Hold
             </h3>
             <button
               style={{ ...styles.closeBtn, ...(submitting && styles.btnDisabled) }}
@@ -229,7 +247,9 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
               &times;
             </button>
           </div>
+
           <div style={styles.modalBody}>
+            {/* Lead Info */}
             <div style={styles.leadInfoCard}>
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>EnQ No:</span>
@@ -243,9 +263,23 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
                 <span style={styles.infoLabel}>Location:</span>
                 <span style={styles.infoValue}>{lead.location}</span>
               </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>Last Planned Date:</span>
+                <span style={styles.infoValue}>{lead.step6Planned}</span>
+              </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>Follow-up Count:</span>
+                <span style={styles.infoValue}>
+                  <span style={styles.followCounterBadge}>{lead.step6FollowCounter || "0"}</span>
+                </span>
+              </div>
               <div style={lead.pdfFolder ? styles.infoRow : styles.infoRowLast}>
-                <span style={styles.infoLabel}>Planned Date:</span>
-                <span style={styles.infoValue}>{lead.step5Planned}</span>
+                <span style={styles.infoLabel}>Status:</span>
+                <span style={styles.infoValue}>
+                  <span style={styles.holdBadge}>
+                    <i className="bi bi-pause-circle"></i> On Hold
+                  </span>
+                </span>
               </div>
               {lead.pdfFolder && (
                 <div style={styles.infoRowLast}>
@@ -259,18 +293,18 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
               )}
             </div>
 
-            {/* ✅ Status Selection with toggleable buttons */}
+            {/* ✅ Action Selection */}
             <div style={styles.formGroup}>
               <label style={styles.label}>
-                <i className="bi bi-flag"></i>Status
+                <i className="bi bi-flag"></i>Action
               </label>
               <div style={styles.statusOptions}>
-                {STATUS_OPTIONS.map((opt) => (
+                {ACTION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
-                    style={getStatusButtonStyle(opt)}
-                    onClick={() => setStatus(status === opt.value ? "" : opt.value)}
+                    style={getActionButtonStyle(opt)}
+                    onClick={() => setAction(action === opt.value ? "" : opt.value)}
                     disabled={submitting}
                   >
                     <i className={`bi ${opt.icon}`}></i>
@@ -280,38 +314,44 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>
-                <i className="bi bi-calendar-event"></i>Planned Date Override (Optional)
-              </label>
-              <input
-                type="datetime-local"
-                style={{ ...styles.formInput, ...(submitting && styles.btnDisabled) }}
-                value={plannedOverride}
-                onChange={(e) => setPlannedOverride(e.target.value)}
-                disabled={submitting}
-              />
-              <small style={styles.formHint}>Leave empty to keep current planned date</small>
-            </div>
+            {/* Planned date for Move to Follow Up */}
+            {action === "Move to Follow Up" && (
+              <div style={styles.followUpGroup}>
+                <label style={styles.label}>
+                  <i className="bi bi-calendar-plus"></i>
+                  New Follow-up Planned Date (Optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  style={{ ...styles.formInput, ...(submitting && styles.btnDisabled) }}
+                  value={plannedOverride}
+                  onChange={(e) => setPlannedOverride(e.target.value)}
+                  disabled={submitting}
+                />
+                <small style={styles.formHint}>Leave empty to keep the existing planned date</small>
+              </div>
+            )}
 
+            {/* Remarks */}
             <RemarksSection
               ref={remarksRef}
               enqNo={lead.enqNo}
-              stepName="Step 5: Proposal Meeting"
+              stepName="Proposal Hold"
               disabled={submitting}
             />
 
-            {/* ✅ Warning for move actions */}
-            {status && status !== "Done" && (
+            {/* Warning for destructive moves */}
+            {(action === "Cold Lead" || action === "Not Qualified Lead") && (
               <div style={styles.warningBox}>
                 <i className="bi bi-exclamation-triangle" style={styles.warningIcon}></i>
                 <span>
                   This will move the lead to{" "}
-                  <strong>{status === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads"}</strong> and remove it from FMS.
+                  <strong>{action === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads"}</strong> and remove it permanently.
                 </span>
               </div>
             )}
           </div>
+
           <div style={styles.modalFooter}>
             <button
               style={{ ...styles.btnCancel, ...(submitting && styles.btnDisabled) }}
@@ -320,15 +360,12 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
               Cancel
             </button>
             <button
-              style={{
-                ...styles.btnPrimary,
-                ...((submitting || (!status && !plannedOverride)) && styles.btnDisabled),
-              }}
+              style={{ ...styles.btnPrimary, ...((submitting || !action) && styles.btnDisabled) }}
               onClick={handleSubmit}
-              disabled={submitting || (!status && !plannedOverride)}
+              disabled={submitting || !action}
             >
               {submitting ? (
-                <><span style={styles.spinnerSmall}></span>Updating...</>
+                <><span style={styles.spinnerSmall}></span>Processing...</>
               ) : (
                 <><i className="bi bi-check-lg"></i>Submit</>
               )}
@@ -340,7 +377,8 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
   );
 }
 
-export default function Step5({ currentUser, onNextAction }) {
+// ============ TAB CONTENT COMPONENT ============
+export default function ProposalHold({ currentUser, onNextAction }) {
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -349,11 +387,13 @@ export default function Step5({ currentUser, onNextAction }) {
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["fms-step5"],
-    queryFn: () => api.get("/fms/step5").then((r) => r.data),
+    queryKey: ["fms-proposal-hold"],
+    queryFn: () => api.get("/fms/proposal-hold").then((r) => r.data),
     staleTime: 30000,
   });
+
   const leads = data?.leads || [];
+
   const filteredLeads = leads.filter((lead) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -368,13 +408,19 @@ export default function Step5({ currentUser, onNextAction }) {
   const handleAction = (lead) => { setSelectedLead(lead); setShowModal(true); };
   const handlePreview = (lead) => { setPreviewLead(lead); setShowPreview(true); };
 
-  // ✅ UPDATED: Also invalidate cold-leads and not-qualified
+  // ✅ Invalidate all relevant queries
   const handleSuccess = () => {
-    queryClient.invalidateQueries(["fms-step5"]);
+    queryClient.invalidateQueries(["fms-proposal-hold"]);
     queryClient.invalidateQueries(["fms-step6"]);
-    queryClient.invalidateQueries(["done"]);
     queryClient.invalidateQueries(["cold-leads"]);
     queryClient.invalidateQueries(["not-qualified"]);
+  };
+
+  const followCounterBadgeStyle = {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    minWidth: "26px", height: "26px", padding: "0 8px",
+    backgroundColor: "#6366f1", color: "#ffffff",
+    borderRadius: "13px", fontSize: "12px", fontWeight: 600,
   };
 
   return (
@@ -392,32 +438,42 @@ export default function Step5({ currentUser, onNextAction }) {
         </div>
         <span className="result-count">{filteredLeads.length} leads</span>
       </div>
+
       {error && (
         <div className="error-msg">
           <i className="bi bi-exclamation-triangle"></i>Failed to load: {error.message}
         </div>
       )}
+
       {isLoading ? (
-        <div className="loading"><div className="spinner"></div><span>Loading Step 5 leads...</span></div>
+        <div className="loading"><div className="spinner"></div><span>Loading Proposal Hold leads...</span></div>
       ) : filteredLeads.length === 0 ? (
         <div className="empty-state">
           <i className="bi bi-inbox"></i>
-          <p>No leads pending in Step 5</p>
-          <small>Leads will appear here when Step 4 is marked Done with Step 5 Planned date</small>
+          <p>No leads on Hold</p>
+          <small>Leads will appear here when put on Hold from Follow Up step</small>
         </div>
       ) : (
         <div className="table-wrapper">
           <table className="lead-table">
             <thead>
               <tr>
-                {STEP5_COLUMNS.map((col) => (<th key={col.key}>{col.label}</th>))}
+                {HOLD_COLUMNS.map((col) => (<th key={col.key}>{col.label}</th>))}
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredLeads.map((lead) => (
                 <tr key={lead.enqNo}>
-                  {STEP5_COLUMNS.map((col) => (<td key={col.key}>{lead[col.key] || "—"}</td>))}
+                  {HOLD_COLUMNS.map((col) => (
+                    <td key={col.key}>
+                      {col.key === "step6FollowCounter" ? (
+                        <span style={followCounterBadgeStyle}>{lead[col.key] || "0"}</span>
+                      ) : (
+                        lead[col.key] || "—"
+                      )}
+                    </td>
+                  ))}
                   <td className="actions-cell">
                     {lead.pdfFolder && (
                       <button className="btn btn-folder" onClick={() => handlePreview(lead)} title="Preview Files">
@@ -425,11 +481,11 @@ export default function Step5({ currentUser, onNextAction }) {
                       </button>
                     )}
                     {onNextAction && (
-                      <button className="btn btn-nap" onClick={() => onNextAction(lead, "FMS", "Step 5: Proposal Meeting")} title="Next Action Plan">
+                      <button className="btn btn-nap" onClick={() => onNextAction(lead, "FMS", "Proposal Hold")} title="Next Action Plan">
                         <i className="bi bi-ticket-perforated"></i>NAP
                       </button>
                     )}
-                    <button className="btn btn-action" onClick={() => handleAction(lead)} title="Update Step 5">
+                    <button className="btn btn-action" onClick={() => handleAction(lead)} title="Manage Hold">
                       <i className="bi bi-pencil-square"></i>Action
                     </button>
                   </td>
@@ -439,12 +495,14 @@ export default function Step5({ currentUser, onNextAction }) {
           </table>
         </div>
       )}
-      <Step5Modal show={showModal} lead={selectedLead}
+
+      <ProposalHoldModal show={showModal} lead={selectedLead}
         onClose={() => { setShowModal(false); setSelectedLead(null); }}
         onSuccess={handleSuccess} />
+
       <FilePreviewModal show={showPreview}
         onClose={() => { setShowPreview(false); setPreviewLead(null); }}
-        files={previewLead ? getAllPreviewFiles(previewLead) : []}
+        files={previewLead ? getPreviewFiles(previewLead) : []}
         folderLink={previewLead?.pdfFolder}
         title={previewLead ? `Files — ${previewLead.clientName} (${previewLead.enqNo})` : "Files"} />
     </div>
