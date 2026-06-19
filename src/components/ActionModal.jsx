@@ -1,11 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
+import RemarksSection from "./Remarkssection.jsx";
 
 export default function ActionModal({ lead, statusOptions, onSubmit, onClose, loading }) {
   const [status, setStatus] = useState("");
   const [remarks, setRemarks] = useState(lead?.remarks || "");
+  const remarksRef = useRef(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!status) return;
+
+    // Save remark to Remarks sheet if entered
+    const remarkText = remarksRef.current?.getRemarkText() || "";
+    if (remarkText.trim()) {
+      await remarksRef.current.saveRemark(remarkText);
+    }
+
     onSubmit({ enqNo: lead.enqNo, status, remarks });
   };
 
@@ -66,17 +75,31 @@ export default function ActionModal({ lead, statusOptions, onSubmit, onClose, lo
             </select>
           </div>
 
-          {/* Remarks */}
+          {/* Old Remarks Field (for status update) */}
           <div className="form-group">
-            <label>Remarks</label>
+            <label>Remarks (with status)</label>
             <textarea
               className="form-control"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Add remarks..."
-              rows={3}
+              placeholder="Add remarks for status update..."
+              rows={2}
             />
           </div>
+
+          {/* ✅ RemarksSection — Independent save, old remarks history */}
+          <RemarksSection
+            ref={remarksRef}
+            enqNo={lead.enqNo}
+            stepName={
+              statusOptions.some((o) => o.value === "DONE")
+                ? "Pipeline"
+                : statusOptions.some((o) => o.value === "COLD LEADS")
+                  ? "Not Qualified"
+                  : "Cold Leads"
+            }
+            disabled={loading}
+          />
         </div>
 
         <div className="modal-footer">
