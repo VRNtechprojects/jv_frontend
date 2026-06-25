@@ -20,25 +20,33 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
 
   const allTickets = data || [];
 
+  // ✅ FIX: Add .trim() to both sides
   const assignedToMe = allTickets.filter(
-    (t) => t.assignedTo?.toLowerCase() === currentUser?.userName?.toLowerCase()
+    (t) =>
+      t.assignedTo?.trim().toLowerCase() ===
+      currentUser?.userName?.trim().toLowerCase(),
   );
 
   const raisedByMe = allTickets.filter(
-    (t) => t.raisedBy?.toLowerCase() === currentUser?.userName?.toLowerCase()
+    (t) =>
+      t.raisedBy?.trim().toLowerCase() ===
+      currentUser?.userName?.trim().toLowerCase(),
   );
 
   const currentList = activeTab === "assigned" ? assignedToMe : raisedByMe;
 
   const isOverdue = (ticket) => {
     if (ticket.status?.toLowerCase() === "completed") return false;
-    const checkDate = ticket.revisedDate || ticket.confirmedDate || ticket.desiredDate;
+    const checkDate =
+      ticket.revisedDate || ticket.confirmedDate || ticket.desiredDate;
     if (!checkDate) return false;
     return new Date() > new Date(checkDate);
   };
 
   const activeAssignedCount = assignedToMe.filter(
-    (t) => t.status?.toLowerCase() !== "completed" && t.status?.toLowerCase() !== "rejected"
+    (t) =>
+      t.status?.toLowerCase() !== "completed" &&
+      t.status?.toLowerCase() !== "rejected",
   ).length;
 
   const overdueCount = assignedToMe.filter(isOverdue).length;
@@ -104,7 +112,9 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
       >
         <i className="bi bi-bell-fill"></i>
         {activeAssignedCount > 0 && (
-          <span className={`notification-badge ${overdueCount > 0 ? "badge-danger" : ""}`}>
+          <span
+            className={`notification-badge ${overdueCount > 0 ? "badge-danger" : ""}`}
+          >
             {activeAssignedCount}
           </span>
         )}
@@ -113,12 +123,18 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
       {/* Half-screen Slide Panel */}
       {isOpen && (
         <>
-          <div className="notif-panel-backdrop" onClick={() => setIsOpen(false)} />
+          <div
+            className="notif-panel-backdrop"
+            onClick={() => setIsOpen(false)}
+          />
           <div className="notif-panel">
             {/* Header */}
             <div className="notif-panel-header">
               <h3>
-                <i className="bi bi-ticket-perforated" style={{ marginRight: 8 }}></i>
+                <i
+                  className="bi bi-ticket-perforated"
+                  style={{ marginRight: 8 }}
+                ></i>
                 My Tickets
               </h3>
               <button className="close-btn" onClick={() => setIsOpen(false)}>
@@ -132,7 +148,10 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
                 className={`notif-tab ${activeTab === "assigned" ? "active" : ""}`}
                 onClick={() => setActiveTab("assigned")}
               >
-                <i className="bi bi-person-check" style={{ marginRight: 6 }}></i>
+                <i
+                  className="bi bi-person-check"
+                  style={{ marginRight: 6 }}
+                ></i>
                 Assigned to Me
                 <span className="notif-tab-count">{assignedToMe.length}</span>
               </button>
@@ -153,26 +172,51 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
                 <span className="notif-stat-label">Total</span>
               </div>
               <div className="notif-stat">
-                <span className="notif-stat-num" style={{ color: "var(--accent-yellow)" }}>{stats.open}</span>
+                <span
+                  className="notif-stat-num"
+                  style={{ color: "var(--accent-yellow)" }}
+                >
+                  {stats.open}
+                </span>
                 <span className="notif-stat-label">Open</span>
               </div>
               <div className="notif-stat">
-                <span className="notif-stat-num" style={{ color: "var(--accent-hover)" }}>{stats.inProgress}</span>
+                <span
+                  className="notif-stat-num"
+                  style={{ color: "var(--accent-hover)" }}
+                >
+                  {stats.inProgress}
+                </span>
                 <span className="notif-stat-label">Progress</span>
               </div>
               <div className="notif-stat">
-                <span className="notif-stat-num" style={{ color: "var(--accent-green)" }}>{stats.completed}</span>
+                <span
+                  className="notif-stat-num"
+                  style={{ color: "var(--accent-green)" }}
+                >
+                  {stats.completed}
+                </span>
                 <span className="notif-stat-label">Done</span>
               </div>
               {stats.overdue > 0 && (
                 <div className="notif-stat">
-                  <span className="notif-stat-num" style={{ color: "var(--accent-red)" }}>{stats.overdue}</span>
+                  <span
+                    className="notif-stat-num"
+                    style={{ color: "var(--accent-red)" }}
+                  >
+                    {stats.overdue}
+                  </span>
                   <span className="notif-stat-label">Overdue</span>
                 </div>
               )}
               {stats.rejected > 0 && (
                 <div className="notif-stat">
-                  <span className="notif-stat-num" style={{ color: "var(--accent-red)" }}>{stats.rejected}</span>
+                  <span
+                    className="notif-stat-num"
+                    style={{ color: "var(--accent-red)" }}
+                  >
+                    {stats.rejected}
+                  </span>
                   <span className="notif-stat-label">Rejected</span>
                 </div>
               )}
@@ -182,7 +226,10 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
             <div className="notif-panel-list">
               {isLoading ? (
                 <div className="notification-loading">
-                  <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }}></div>
+                  <div
+                    className="spinner"
+                    style={{ width: 16, height: 16, borderWidth: 2 }}
+                  ></div>
                   <span style={{ marginLeft: 8 }}>Loading...</span>
                 </div>
               ) : sortedList.length === 0 ? (
@@ -209,8 +256,13 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
                     >
                       <div className="notif-item-top">
                         <span className="notif-item-id">{ticket.ticketId}</span>
-                        <span className={`badge ${getStatusBadgeClass(displayStatus)}`}>
-                          <i className={getStatusIcon(displayStatus)} style={{ marginRight: 4 }}></i>
+                        <span
+                          className={`badge ${getStatusBadgeClass(displayStatus)}`}
+                        >
+                          <i
+                            className={getStatusIcon(displayStatus)}
+                            style={{ marginRight: 4 }}
+                          ></i>
                           {displayStatus}
                         </span>
                       </div>
@@ -219,12 +271,18 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
                         {ticket.clientName} — {ticket.enqNo}
                       </div>
 
-                      <div className="notif-item-issue">{ticket.issueDescription}</div>
+                      <div className="notif-item-issue">
+                        {ticket.issueDescription}
+                      </div>
 
                       <div className="notif-item-meta">
                         <span>
                           <i className="bi bi-calendar3"></i>
-                          Due: {ticket.revisedDate || ticket.confirmedDate || ticket.desiredDate || "—"}
+                          Due:{" "}
+                          {ticket.revisedDate ||
+                            ticket.confirmedDate ||
+                            ticket.desiredDate ||
+                            "—"}
                         </span>
                         {activeTab === "raised" && (
                           <span>
@@ -240,14 +298,19 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
                         )}
                         <span>
                           <i className="bi bi-tag"></i>
-                          {ticket.sourceTab}{ticket.stepName ? ` / ${ticket.stepName}` : ""}
+                          {ticket.sourceTab}
+                          {ticket.stepName ? ` / ${ticket.stepName}` : ""}
                         </span>
                       </div>
 
                       {parseInt(ticket.revisionCount) > 0 && (
                         <div className="notif-item-revision">
-                          <i className="bi bi-arrow-repeat" style={{ marginRight: 4 }}></i>
-                          {ticket.revisionCount} revision(s) — Last: {ticket.revisedDate}
+                          <i
+                            className="bi bi-arrow-repeat"
+                            style={{ marginRight: 4 }}
+                          ></i>
+                          {ticket.revisionCount} revision(s) — Last:{" "}
+                          {ticket.revisedDate}
                         </div>
                       )}
                     </div>
