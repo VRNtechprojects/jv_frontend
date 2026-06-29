@@ -3,6 +3,41 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../api.js";
 import TicketUpdateModal from "../components/TicketUpdateModal.jsx";
 
+// ✅ Properly parse DD/MM/YYYY or DD/MM/YYYY, HH:MM:SS to JS Date
+function parseSheetDate(dateStr) {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim();
+  if (!str) return null;
+
+  // DD/MM/YYYY or DD/MM/YYYY, HH:MM:SS
+  const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[, ]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (match) {
+    const [, dd, mm, yyyy, hh, mi, ss] = match;
+    const d = new Date(
+      parseInt(yyyy),
+      parseInt(mm) - 1,
+      parseInt(dd),
+      hh ? parseInt(hh) : 23,
+      mi ? parseInt(mi) : 59,
+      ss ? parseInt(ss) : 59,
+      999
+    );
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // ISO YYYY-MM-DD fallback
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      d.setHours(23, 59, 59, 999);
+      return d;
+    }
+  }
+
+  return null;
+}
+
 export default function NextActionPlanPage({ currentUser }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -51,12 +86,19 @@ export default function NextActionPlanPage({ currentUser }) {
     return matchesSearch && matchesStatus && matchesAssignee;
   });
 
-  // Stats
+  // ✅ FIXED: Properly parse DD/MM/YYYY format
   const isOverdue = (ticket) => {
-    if (ticket.status === "Completed") return false;
+    const statusLower = ticket.status?.toLowerCase();
+    if (statusLower === "completed" || statusLower === "rejected") return false;
+
+    // Priority: Revised > Confirmed > Desired
     const checkDate = ticket.revisedDate || ticket.confirmedDate || ticket.desiredDate;
     if (!checkDate) return false;
-    return new Date() > new Date(checkDate);
+
+    const dueDate = parseSheetDate(checkDate);
+    if (!dueDate) return false;
+
+    return new Date() > dueDate;
   };
 
   const stats = {

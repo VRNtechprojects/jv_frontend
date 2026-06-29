@@ -35,12 +35,45 @@ export default function NotificationPanel({ currentUser, onTicketClick }) {
 
   const currentList = activeTab === "assigned" ? assignedToMe : raisedByMe;
 
+  // ✅ Properly parse DD/MM/YYYY format
+  function parseDDMMYYYY(dateStr) {
+    if (!dateStr) return null;
+    const str = String(dateStr).trim();
+
+    // DD/MM/YYYY format
+    const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (match) {
+      const [, dd, mm, yyyy] = match;
+      const d = new Date(
+        parseInt(yyyy),
+        parseInt(mm) - 1,
+        parseInt(dd),
+        23,
+        59,
+        59,
+        999,
+      );
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    // ISO YYYY-MM-DD
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
   const isOverdue = (ticket) => {
-    if (ticket.status?.toLowerCase() === "completed") return false;
+    const statusLower = ticket.status?.toLowerCase();
+    if (statusLower === "completed" || statusLower === "rejected") return false;
+
+    // ✅ Priority: Revised > Confirmed > Desired
     const checkDate =
       ticket.revisedDate || ticket.confirmedDate || ticket.desiredDate;
     if (!checkDate) return false;
-    return new Date() > new Date(checkDate);
+
+    const dueDate = parseDDMMYYYY(checkDate);
+    if (!dueDate) return false;
+
+    return new Date() > dueDate;
   };
 
   const activeAssignedCount = assignedToMe.filter(
