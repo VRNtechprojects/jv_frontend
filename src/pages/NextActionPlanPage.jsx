@@ -36,7 +36,6 @@ function parseSheetDate(dateStr) {
   return null;
 }
 
-// ✅ Parse confirmed date for range comparison (returns midnight - start of day)
 function parseDateForRange(dateStr) {
   if (!dateStr) return null;
   const str = String(dateStr).trim();
@@ -65,8 +64,9 @@ export default function NextActionPlanPage({ currentUser }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterAssignee, setFilterAssignee] = useState("");
-  const [confirmDateFrom, setConfirmDateFrom] = useState("");  // ✅ NEW
-  const [confirmDateTo, setConfirmDateTo] = useState("");      // ✅ NEW
+  const [confirmDateFrom, setConfirmDateFrom] = useState("");
+  const [confirmDateTo, setConfirmDateTo] = useState("");
+  const [showCompleted, setShowCompleted] = useState(false);  // ✅ NEW: Toggle for completed
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
 
@@ -93,12 +93,17 @@ export default function NextActionPlanPage({ currentUser }) {
   const tickets = data || [];
   const users = usersData || [];
 
-  // ✅ Parse date range filter values once
   const dateFromObj = confirmDateFrom ? new Date(confirmDateFrom + "T00:00:00") : null;
   const dateToObj = confirmDateTo ? new Date(confirmDateTo + "T23:59:59") : null;
 
-  // Filters
-  const filteredTickets = tickets.filter((t) => {
+  // ✅ FIRST: Hide completed unless toggle is on
+  const visibleTickets = tickets.filter((t) => {
+    if (!showCompleted && t.status?.toLowerCase() === "completed") return false;
+    return true;
+  });
+
+  // Then apply other filters
+  const filteredTickets = visibleTickets.filter((t) => {
     const matchesSearch =
       !search ||
       t.ticketId?.toLowerCase().includes(search.toLowerCase()) ||
@@ -110,12 +115,10 @@ export default function NextActionPlanPage({ currentUser }) {
     const matchesStatus = !filterStatus || t.status === filterStatus;
     const matchesAssignee = !filterAssignee || t.assignedTo === filterAssignee;
 
-    // ✅ NEW: Confirmed Date Range Filter
     let matchesConfirmDate = true;
     if (dateFromObj || dateToObj) {
       const confirmedDateObj = parseDateForRange(t.confirmedDate);
       if (!confirmedDateObj) {
-        // If no confirmed date, exclude when filter is active
         matchesConfirmDate = false;
       } else {
         if (dateFromObj && confirmedDateObj < dateFromObj) matchesConfirmDate = false;
@@ -163,12 +166,24 @@ export default function NextActionPlanPage({ currentUser }) {
     return map[status] || "badge-default";
   };
 
+  const getStatusIcon = (status) => {
+    const map = {
+      Open: "bi-circle",
+      "PC Confirmed": "bi-check-circle",
+      "In Progress": "bi-arrow-repeat",
+      "Date Revision Requested": "bi-calendar-event",
+      Completed: "bi-check-circle-fill",
+      Rejected: "bi-x-circle-fill",
+      Overdue: "bi-exclamation-triangle-fill",
+    };
+    return map[status] || "bi-circle";
+  };
+
   const handleTicketClick = (ticket) => {
     setSelectedTicket(ticket);
     setShowUpdateModal(true);
   };
 
-  // ✅ Reset all filters
   const handleClearFilters = () => {
     setSearch("");
     setFilterStatus("");
@@ -179,7 +194,6 @@ export default function NextActionPlanPage({ currentUser }) {
 
   const hasActiveFilters = search || filterStatus || filterAssignee || confirmDateFrom || confirmDateTo;
 
-  // ✅ Quick presets for confirm date range
   const setQuickRange = (preset) => {
     const today = new Date();
     const fmt = (d) => {
@@ -211,6 +225,26 @@ export default function NextActionPlanPage({ currentUser }) {
     }
   };
 
+  // ✅ Sort cards: Overdue first → Revision Req → In Progress → PC Confirmed → Open → Rejected → Completed
+  const statusPriority = {
+    "Date Revision Requested": 2,
+    "In Progress": 3,
+    "PC Confirmed": 4,
+    "Open": 5,
+    "Rejected": 6,
+    "Completed": 7,
+  };
+
+  const sortedTickets = [...filteredTickets].sort((a, b) => {
+    const aOv = isOverdue(a);
+    const bOv = isOverdue(b);
+    if (aOv && !bOv) return -1;
+    if (!aOv && bOv) return 1;
+    const aP = statusPriority[a.status] || 99;
+    const bP = statusPriority[b.status] || 99;
+    return aP - bP;
+  });
+
   return (
     <div className="nap-page">
       {/* Page Header */}
@@ -219,7 +253,7 @@ export default function NextActionPlanPage({ currentUser }) {
           <i className="bi bi-ticket-perforated" style={{ marginRight: 10, color: "var(--accent-primary)" }}></i>
           Next Action Plan
         </h2>
-        <span className="badge badge-blue">{filteredTickets.length} tickets</span>
+        <span className="badge badge-blue">{sortedTickets.length} tickets</span>
       </div>
 
       {/* Stats */}
@@ -262,7 +296,7 @@ export default function NextActionPlanPage({ currentUser }) {
         )}
       </div>
 
-      {/* Filters Row 1 — Search, Status, Assignee, Refresh */}
+      {/* Filters Row 1 */}
       <div className="nap-filters">
         <div className="search-box">
           <i className="bi bi-search"></i>
@@ -284,7 +318,7 @@ export default function NextActionPlanPage({ currentUser }) {
           <option value="PC Confirmed">PC Confirmed</option>
           <option value="In Progress">In Progress</option>
           <option value="Date Revision Requested">Date Revision Requested</option>
-          <option value="Completed">Completed</option>
+          {showCompleted && <option value="Completed">Completed</option>}
           <option value="Rejected">Rejected</option>
           <option value="Overdue">Overdue</option>
         </select>
@@ -302,12 +336,30 @@ export default function NextActionPlanPage({ currentUser }) {
           ))}
         </select>
 
+        {/* ✅ Show Completed Toggle */}
+        <label className="completed-toggle">
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(e) => {
+              setShowCompleted(e.target.checked);
+              if (!e.target.checked && filterStatus === "Completed") {
+                setFilterStatus("");
+              }
+            }}
+          />
+          <span>
+            <i className="bi bi-check-circle-fill" style={{ marginRight: 4 }}></i>
+            Show Completed ({stats.completed})
+          </span>
+        </label>
+
         <button className="btn-refresh" onClick={() => refetch()}>
           <i className="bi bi-arrow-clockwise"></i> Refresh
         </button>
       </div>
 
-      {/* ✅ NEW: Confirmed Date Range Filter Row */}
+      {/* Date Range Filter */}
       <div className="nap-date-filter">
         <div className="date-filter-group">
           <label className="date-filter-label">
@@ -340,7 +392,6 @@ export default function NextActionPlanPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Quick range presets */}
         <div className="date-presets">
           <button className="preset-btn" onClick={() => setQuickRange("today")}>Today</button>
           <button className="preset-btn" onClick={() => setQuickRange("week")}>Last 7 Days</button>
@@ -355,7 +406,6 @@ export default function NextActionPlanPage({ currentUser }) {
         )}
       </div>
 
-      {/* Active Filters Indicator */}
       {(confirmDateFrom || confirmDateTo) && (
         <div className="active-filter-info">
           <i className="bi bi-funnel-fill"></i>
@@ -365,13 +415,13 @@ export default function NextActionPlanPage({ currentUser }) {
         </div>
       )}
 
-      {/* Table */}
+      {/* ✅ CARD LAYOUT */}
       {isLoading ? (
         <div className="loading">
           <div className="spinner"></div>
           <span>Loading tickets...</span>
         </div>
-      ) : filteredTickets.length === 0 ? (
+      ) : sortedTickets.length === 0 ? (
         <div className="empty-state">
           <i className="bi bi-ticket-perforated"></i>
           <p>No tickets found</p>
@@ -382,72 +432,110 @@ export default function NextActionPlanPage({ currentUser }) {
           )}
         </div>
       ) : (
-        <div className="table-wrapper">
-          <div className="table-scroll">
-            <table className="nap-table">
-              <thead>
-                <tr>
-                  <th>Ticket ID</th>
-                  <th>EnQ No</th>
-                  <th>Client</th>
-                  <th>Raised By</th>
-                  <th>Assigned To</th>
-                  <th>Issue</th>
-                  <th>Desired Date</th>
-                  <th>Confirmed</th>
-                  <th>Status</th>
-                  <th>Source</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTickets.map((ticket) => {
-                  const ov = isOverdue(ticket);
-                  return (
-                    <tr key={ticket.ticketId} className={ov ? "row-overdue" : ""}>
-                      <td className="ticket-id-cell">{ticket.ticketId}</td>
-                      <td className="td-enq">{ticket.enqNo}</td>
-                      <td className="td-client">{ticket.clientName}</td>
-                      <td>{ticket.raisedBy}</td>
-                      <td>{ticket.assignedTo}</td>
-                      <td className="issue-cell" title={ticket.issueDescription}>
-                        {ticket.issueDescription?.substring(0, 50)}
-                        {ticket.issueDescription?.length > 50 ? "..." : ""}
-                      </td>
-                      <td>{ticket.desiredDate}</td>
-                      <td>{ticket.confirmedDate || "—"}</td>
-                      <td>
-                        <span className={`badge ${getStatusBadgeClass(ov ? "Overdue" : ticket.status)}`}>
-                          {ov ? "Overdue" : ticket.status}
-                        </span>
-                        {parseInt(ticket.revisionCount) > 0 && (
-                          <span className="revision-count" title="Revision count">
-                            R{ticket.revisionCount}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="badge badge-source">{ticket.sourceTab}</span>
-                        {ticket.stepName && (
-                          <span className="badge badge-step">{ticket.stepName}</span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-action"
-                          onClick={() => handleTicketClick(ticket)}
-                          title="Update Ticket"
-                        >
-                          <i className="bi bi-pencil-square"></i>
-                          Update
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="ticket-cards-grid">
+          {sortedTickets.map((ticket) => {
+            const ov = isOverdue(ticket);
+            const displayStatus = ov ? "Overdue" : ticket.status;
+            const isCompleted = ticket.status?.toLowerCase() === "completed";
+            const isRejected = ticket.status?.toLowerCase() === "rejected";
+
+            return (
+              <div
+                key={ticket.ticketId}
+                className={`ticket-card ${ov ? "card-overdue" : ""} ${isCompleted ? "card-completed" : ""} ${isRejected ? "card-rejected" : ""}`}
+                onClick={() => handleTicketClick(ticket)}
+              >
+                {/* Card Header */}
+                <div className="ticket-card-header">
+                  <div className="ticket-card-id">
+                    <i className="bi bi-ticket-perforated-fill"></i>
+                    <span>{ticket.ticketId}</span>
+                  </div>
+                  <span className={`badge ${getStatusBadgeClass(displayStatus)}`}>
+                    <i className={getStatusIcon(displayStatus)} style={{ marginRight: 4 }}></i>
+                    {displayStatus}
+                  </span>
+                </div>
+
+                {/* Client & EnQ */}
+                <div className="ticket-card-client">
+                  <h4 className="client-name">{ticket.clientName || "—"}</h4>
+                  <span className="enq-badge">{ticket.enqNo}</span>
+                </div>
+
+                {/* Issue Description */}
+                <div className="ticket-card-issue">
+                  <i className="bi bi-chat-left-text"></i>
+                  <p title={ticket.issueDescription}>
+                    {ticket.issueDescription?.length > 100
+                      ? ticket.issueDescription.substring(0, 100) + "..."
+                      : ticket.issueDescription || "No description"}
+                  </p>
+                </div>
+
+                {/* Meta Grid */}
+                <div className="ticket-card-meta">
+                  <div className="meta-item">
+                    <span className="meta-label">
+                      <i className="bi bi-person"></i> Raised By
+                    </span>
+                    <span className="meta-value">{ticket.raisedBy || "—"}</span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">
+                      <i className="bi bi-person-check"></i> Assigned
+                    </span>
+                    <span className="meta-value">{ticket.assignedTo || "—"}</span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">
+                      <i className="bi bi-calendar3"></i> Desired
+                    </span>
+                    <span className="meta-value">{ticket.desiredDate || "—"}</span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">
+                      <i className="bi bi-calendar-check"></i> Confirmed
+                    </span>
+                    <span className="meta-value">{ticket.confirmedDate || "—"}</span>
+                  </div>
+                </div>
+
+                {/* Revision Info (if any) */}
+                {parseInt(ticket.revisionCount) > 0 && (
+                  <div className="ticket-card-revision">
+                    <i className="bi bi-arrow-repeat"></i>
+                    <span>
+                      {ticket.revisionCount} revision(s)
+                      {ticket.revisedDate && <> — Last: {ticket.revisedDate}</>}
+                    </span>
+                  </div>
+                )}
+
+                {/* Footer Tags */}
+                <div className="ticket-card-footer">
+                  <div className="ticket-card-tags">
+                    <span className="badge badge-source">{ticket.sourceTab}</span>
+                    {ticket.stepName && (
+                      <span className="badge badge-step">{ticket.stepName}</span>
+                    )}
+                  </div>
+                  <div className="ticket-card-action">
+                    <i className="bi bi-pencil-square"></i>
+                    <span>Click to Update</span>
+                  </div>
+                </div>
+
+                {/* Overdue Banner */}
+                {ov && (
+                  <div className="overdue-banner">
+                    <i className="bi bi-exclamation-triangle-fill"></i>
+                    Overdue!
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
