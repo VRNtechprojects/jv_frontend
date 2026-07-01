@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import AssignLeadModal from "../../../components/AssignLeadModal.jsx";
 import { toast } from "react-toastify";
 import api from "../../../api.js";
 import RemarksSection from "../../../components/Remarkssection.jsx";
@@ -249,14 +250,15 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
     }
 
     if (status && status !== "Done") {
-      const confirmMsg = `Are you sure you want to move this lead to ${status === "Back to Pipeline" ? "Pipeline" : status}?`;
+      const confirmMsg = `Are you sure you want to move this lead to ${
+        status === "Back to Pipeline" ? "Pipeline" : status
+      }?`;
       if (!window.confirm(confirmMsg)) return;
     }
 
     setSubmitting(true);
 
     try {
-      // Get remark text from RemarksSection
       const remarkText = remarksRef.current?.getRemarkText() || "";
 
       const res = await api.post("/fms/step3/update", {
@@ -268,7 +270,6 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
       });
 
       if (res.data.success) {
-        // Save remark to Remarks sheet if text exists
         if (remarkText.trim()) {
           await remarksRef.current.saveRemark(remarkText);
         }
@@ -280,7 +281,9 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
       }
     } catch (err) {
       console.error("Step 3 update error:", err);
-      toast.error("Update failed: " + (err.response?.data?.error || err.message));
+      toast.error(
+        "Update failed: " + (err.response?.data?.error || err.message)
+      );
     } finally {
       setSubmitting(false);
     }
@@ -317,7 +320,10 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
               Step 3: Need Analysis Meeting
             </h3>
             <button
-              style={{ ...styles.closeBtn, ...(submitting && styles.btnDisabled) }}
+              style={{
+                ...styles.closeBtn,
+                ...(submitting && styles.btnDisabled),
+              }}
               onClick={handleClose}
               disabled={submitting}
             >
@@ -357,7 +363,9 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
                     key={opt.value}
                     type="button"
                     style={getStatusButtonStyle(opt)}
-                    onClick={() => setStatus(status === opt.value ? "" : opt.value)}
+                    onClick={() =>
+                      setStatus(status === opt.value ? "" : opt.value)
+                    }
                     disabled={submitting}
                   >
                     <i className={`bi ${opt.icon}`}></i>
@@ -385,16 +393,26 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
             </div>
 
             {/* Remarks Section */}
-            <RemarksSection ref={remarksRef} enqNo={lead.enqNo} stepName="Step 3: Need Analysis Meeting" disabled={submitting} />
+            <RemarksSection
+              ref={remarksRef}
+              enqNo={lead.enqNo}
+              stepName="Step 3: Need Analysis Meeting"
+              disabled={submitting}
+            />
 
             {/* Warning for move actions */}
             {status && status !== "Done" && (
               <div style={styles.warningBox}>
-                <i className="bi bi-exclamation-triangle" style={styles.warningIcon}></i>
+                <i
+                  className="bi bi-exclamation-triangle"
+                  style={styles.warningIcon}
+                ></i>
                 <span>
                   This will move the lead to{" "}
-                  <strong>{status === "Back to Pipeline" ? "Pipeline" : status}</strong> and
-                  remove it from FMS.
+                  <strong>
+                    {status === "Back to Pipeline" ? "Pipeline" : status}
+                  </strong>{" "}
+                  and remove it from FMS.
                 </span>
               </div>
             )}
@@ -402,7 +420,10 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
 
           <div style={styles.modalFooter}>
             <button
-              style={{ ...styles.btnCancel, ...(submitting && styles.btnDisabled) }}
+              style={{
+                ...styles.btnCancel,
+                ...(submitting && styles.btnDisabled),
+              }}
               onClick={handleClose}
               disabled={submitting}
             >
@@ -411,7 +432,8 @@ function Step3Modal({ show, lead, onClose, onSuccess }) {
             <button
               style={{
                 ...styles.btnPrimary,
-                ...((submitting || (!status && !plannedOverride)) && styles.btnDisabled),
+                ...((submitting || (!status && !plannedOverride)) &&
+                  styles.btnDisabled),
               }}
               onClick={handleSubmit}
               disabled={submitting || (!status && !plannedOverride)}
@@ -440,7 +462,15 @@ export default function Step3({ currentUser, onNextAction }) {
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState(null);
   const [showModal, setShowModal] = useState(false);
+
+  // ✅ Assign Lead states
+  const [assignLead, setAssignLead] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const queryClient = useQueryClient();
+
+  // ✅ Admin check
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["fms-step3"],
@@ -448,6 +478,17 @@ export default function Step3({ currentUser, onNextAction }) {
     staleTime: 30000,
   });
 
+  // ✅ Fetch latest assignments map
+  const { data: latestData } = useQuery({
+    queryKey: ["assignment-latest"],
+    queryFn: async () => {
+      const res = await api.get("/lead-assignment/latest");
+      return res.data.latestByEnq || {};
+    },
+    staleTime: 30000,
+  });
+
+  const latestByEnq = latestData || {};
   const leads = data?.leads || [];
 
   const filteredLeads = leads.filter((lead) => {
@@ -464,6 +505,12 @@ export default function Step3({ currentUser, onNextAction }) {
   const handleAction = (lead) => {
     setSelectedLead(lead);
     setShowModal(true);
+  };
+
+  // ✅ Assign click handler
+  const handleAssignClick = (lead) => {
+    setAssignLead(lead);
+    setShowAssignModal(true);
   };
 
   const handleSuccess = () => {
@@ -511,7 +558,10 @@ export default function Step3({ currentUser, onNextAction }) {
         <div className="empty-state">
           <i className="bi bi-inbox"></i>
           <p>No leads pending in Step 3</p>
-          <small>Leads will appear here when Step 2 is complete and Step 3 Planned date is set</small>
+          <small>
+            Leads will appear here when Step 2 is complete and Step 3 Planned
+            date is set
+          </small>
         </div>
       ) : (
         <div className="table-wrapper">
@@ -521,37 +571,104 @@ export default function Step3({ currentUser, onNextAction }) {
                 {STEP3_COLUMNS.map((col) => (
                   <th key={col.key}>{col.label}</th>
                 ))}
+                {/* ✅ Assigned To column header */}
+                <th>Assigned To</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => (
-                <tr key={lead.enqNo}>
-                  {STEP3_COLUMNS.map((col) => (
-                    <td key={col.key}>{lead[col.key] || "—"}</td>
-                  ))}
-                  <td className="actions-cell">
-                    {onNextAction && (
-                      <button
-                        className="btn btn-nap"
-                        onClick={() => onNextAction(lead, "FMS", "Step 3: Need Analysis Meeting")}
-                        title="Next Action Plan"
+              {filteredLeads.map((lead) => {
+                // ✅ Get assigned user for this lead
+                const assignedTo =
+                  latestByEnq[lead.enqNo]?.assignedTo || "";
+                return (
+                  <tr key={lead.enqNo}>
+                    {STEP3_COLUMNS.map((col) => (
+                      <td key={col.key}>{lead[col.key] || "—"}</td>
+                    ))}
+
+                    {/* ✅ Assigned To cell */}
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          cursor: isAdmin ? "pointer" : "default",
+                        }}
+                        onClick={(e) => {
+                          if (isAdmin) {
+                            e.stopPropagation();
+                            handleAssignClick(lead);
+                          }
+                        }}
                       >
-                        <i className="bi bi-ticket-perforated"></i>
-                        NAP
+                        {assignedTo ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              padding: "3px 8px",
+                              background: "rgba(99, 102, 241, 0.1)",
+                              borderRadius: 6,
+                              color: "#6366f1",
+                              fontWeight: 600,
+                              fontSize: 12,
+                            }}
+                          >
+                            <i className="bi bi-person-check"></i>
+                            {assignedTo}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                              fontSize: 12,
+                            }}
+                          >
+                            Unassigned
+                          </span>
+                        )}
+                        {isAdmin && (
+                          <i
+                            className="bi bi-pencil-square"
+                            style={{ fontSize: 12, color: "#6b7280" }}
+                          ></i>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="actions-cell">
+                      {onNextAction && (
+                        <button
+                          className="btn btn-nap"
+                          onClick={() =>
+                            onNextAction(
+                              lead,
+                              "FMS",
+                              "Step 3: Need Analysis Meeting"
+                            )
+                          }
+                          title="Next Action Plan"
+                        >
+                          <i className="bi bi-ticket-perforated"></i>
+                          NAP
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-action"
+                        onClick={() => handleAction(lead)}
+                        title="Update Step 3"
+                      >
+                        <i className="bi bi-pencil-square"></i>
+                        Action
                       </button>
-                    )}
-                    <button
-                      className="btn btn-action"
-                      onClick={() => handleAction(lead)}
-                      title="Update Step 3"
-                    >
-                      <i className="bi bi-pencil-square"></i>
-                      Action
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -565,6 +682,21 @@ export default function Step3({ currentUser, onNextAction }) {
           setSelectedLead(null);
         }}
         onSuccess={handleSuccess}
+      />
+
+      {/* ✅ Assign Lead Modal */}
+      <AssignLeadModal
+        show={showAssignModal}
+        onClose={() => {
+          setShowAssignModal(false);
+          setAssignLead(null);
+        }}
+        lead={assignLead}
+        stepName="Step 3: Need Analysis Meeting"
+        currentUser={currentUser}
+        currentAssignee={
+          assignLead ? latestByEnq[assignLead.enqNo]?.assignedTo : ""
+        }
       />
     </div>
   );

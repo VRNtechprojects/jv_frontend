@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import api from "../../../api.js";
 import FilePreviewModal from "../../../components/Filepreviewmodal.jsx";
 import RemarksSection from "../../../components/Remarkssection.jsx";
+import AssignLeadModal from "../../../components/AssignLeadModal.jsx";
 
 const STEP5_COLUMNS = [
   { key: "enqNo", label: "EnQ No" },
@@ -16,7 +17,6 @@ const STEP5_COLUMNS = [
   { key: "step5Planned", label: "Planned Date" },
 ];
 
-// ✅ UPDATED: Added Cold Lead + Not Qualified options
 const STATUS_OPTIONS = [
   { value: "Done", label: "Done", icon: "bi-check-circle", color: "#22c55e" },
   { value: "Cold Lead", label: "Cold Lead", icon: "bi-snow2", color: "#3b82f6" },
@@ -90,7 +90,6 @@ const styles = {
     fontSize: "14px", fontWeight: 500,
     color: "var(--text-primary, #111827)", marginBottom: "8px",
   },
-  // ✅ Changed from single column to 2-column grid
   statusOptions: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" },
   statusOption: {
     display: "flex", alignItems: "center", justifyContent: "center",
@@ -148,6 +147,7 @@ const styles = {
 
 const spinnerKeyframes = `@keyframes spin { to { transform: rotate(360deg); } }`;
 
+// ============ MODAL COMPONENT ============
 function Step5Modal({ show, lead, onClose, onSuccess }) {
   const [status, setStatus] = useState("");
   const [plannedOverride, setPlannedOverride] = useState("");
@@ -162,7 +162,6 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
       return;
     }
 
-    // Confirm for move actions
     if (status && status !== "Done") {
       const dest = status === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads";
       if (!window.confirm(`Move this lead to ${dest}? This will remove it from FMS.`)) return;
@@ -224,7 +223,8 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
             </h3>
             <button
               style={{ ...styles.closeBtn, ...(submitting && styles.btnDisabled) }}
-              onClick={handleClose} disabled={submitting}
+              onClick={handleClose}
+              disabled={submitting}
             >
               &times;
             </button>
@@ -259,7 +259,6 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
               )}
             </div>
 
-            {/* ✅ Status Selection with toggleable buttons */}
             <div style={styles.formGroup}>
               <label style={styles.label}>
                 <i className="bi bi-flag"></i>Status
@@ -301,7 +300,6 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
               disabled={submitting}
             />
 
-            {/* ✅ Warning for move actions */}
             {status && status !== "Done" && (
               <div style={styles.warningBox}>
                 <i className="bi bi-exclamation-triangle" style={styles.warningIcon}></i>
@@ -315,7 +313,8 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
           <div style={styles.modalFooter}>
             <button
               style={{ ...styles.btnCancel, ...(submitting && styles.btnDisabled) }}
-              onClick={handleClose} disabled={submitting}
+              onClick={handleClose}
+              disabled={submitting}
             >
               Cancel
             </button>
@@ -340,20 +339,38 @@ function Step5Modal({ show, lead, onClose, onSuccess }) {
   );
 }
 
+// ============ TAB COMPONENT ============
 export default function Step5({ currentUser, onNextAction }) {
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [previewLead, setPreviewLead] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [assignLead, setAssignLead] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const queryClient = useQueryClient();
+
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["fms-step5"],
     queryFn: () => api.get("/fms/step5").then((r) => r.data),
     staleTime: 30000,
   });
+
+  // ✅ Fetch latest assignments map
+  const { data: latestData } = useQuery({
+    queryKey: ["assignment-latest"],
+    queryFn: async () => {
+      const res = await api.get("/lead-assignment/latest");
+      return res.data.latestByEnq || {};
+    },
+    staleTime: 30000,
+  });
+
+  const latestByEnq = latestData || {};
   const leads = data?.leads || [];
+
   const filteredLeads = leads.filter((lead) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -365,10 +382,21 @@ export default function Step5({ currentUser, onNextAction }) {
     );
   });
 
-  const handleAction = (lead) => { setSelectedLead(lead); setShowModal(true); };
-  const handlePreview = (lead) => { setPreviewLead(lead); setShowPreview(true); };
+  const handleAction = (lead) => {
+    setSelectedLead(lead);
+    setShowModal(true);
+  };
 
-  // ✅ UPDATED: Also invalidate cold-leads and not-qualified
+  const handlePreview = (lead) => {
+    setPreviewLead(lead);
+    setShowPreview(true);
+  };
+
+  const handleAssignClick = (lead) => {
+    setAssignLead(lead);
+    setShowAssignModal(true);
+  };
+
   const handleSuccess = () => {
     queryClient.invalidateQueries(["fms-step5"]);
     queryClient.invalidateQueries(["fms-step6"]);
@@ -382,8 +410,13 @@ export default function Step5({ currentUser, onNextAction }) {
       <div className="filter-bar">
         <div className="search-box">
           <i className="bi bi-search"></i>
-          <input type="text" className="filter-input" placeholder="Search by EnQ No, client, location..."
-            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Search by EnQ No, client, location..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           {search && (
             <button className="search-clear" onClick={() => setSearch("")}>
               <i className="bi bi-x"></i>
@@ -392,13 +425,18 @@ export default function Step5({ currentUser, onNextAction }) {
         </div>
         <span className="result-count">{filteredLeads.length} leads</span>
       </div>
+
       {error && (
         <div className="error-msg">
           <i className="bi bi-exclamation-triangle"></i>Failed to load: {error.message}
         </div>
       )}
+
       {isLoading ? (
-        <div className="loading"><div className="spinner"></div><span>Loading Step 5 leads...</span></div>
+        <div className="loading">
+          <div className="spinner"></div>
+          <span>Loading Step 5 leads...</span>
+        </div>
       ) : filteredLeads.length === 0 ? (
         <div className="empty-state">
           <i className="bi bi-inbox"></i>
@@ -410,43 +448,132 @@ export default function Step5({ currentUser, onNextAction }) {
           <table className="lead-table">
             <thead>
               <tr>
-                {STEP5_COLUMNS.map((col) => (<th key={col.key}>{col.label}</th>))}
+                {STEP5_COLUMNS.map((col) => (
+                  <th key={col.key}>{col.label}</th>
+                ))}
+                <th>Assigned To</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => (
-                <tr key={lead.enqNo}>
-                  {STEP5_COLUMNS.map((col) => (<td key={col.key}>{lead[col.key] || "—"}</td>))}
-                  <td className="actions-cell">
-                    {lead.pdfFolder && (
-                      <button className="btn btn-folder" onClick={() => handlePreview(lead)} title="Preview Files">
-                        <i className="bi bi-eye"></i>
+              {filteredLeads.map((lead) => {
+                const assignedTo = latestByEnq[lead.enqNo]?.assignedTo || "";
+                return (
+                  <tr key={lead.enqNo}>
+                    {STEP5_COLUMNS.map((col) => (
+                      <td key={col.key}>{lead[col.key] || "—"}</td>
+                    ))}
+
+                    {/* ✅ Assigned To Column */}
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          cursor: isAdmin ? "pointer" : "default",
+                        }}
+                        onClick={(e) => {
+                          if (isAdmin) {
+                            e.stopPropagation();
+                            handleAssignClick(lead);
+                          }
+                        }}
+                      >
+                        {assignedTo ? (
+                          <span style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "3px 8px",
+                            background: "rgba(99, 102, 241, 0.1)",
+                            borderRadius: 6,
+                            color: "#6366f1",
+                            fontWeight: 600,
+                            fontSize: 12,
+                          }}>
+                            <i className="bi bi-person-check"></i>
+                            {assignedTo}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#9ca3af", fontStyle: "italic", fontSize: 12 }}>
+                            Unassigned
+                          </span>
+                        )}
+                        {isAdmin && (
+                          <i className="bi bi-pencil-square" style={{ fontSize: 12, color: "#6b7280" }}></i>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="actions-cell">
+                      {lead.pdfFolder && (
+                        <button
+                          className="btn btn-folder"
+                          onClick={() => handlePreview(lead)}
+                          title="Preview Files"
+                        >
+                          <i className="bi bi-eye"></i>
+                        </button>
+                      )}
+                      {onNextAction && (
+                        <button
+                          className="btn btn-nap"
+                          onClick={() => onNextAction(lead, "FMS", "Step 5: Proposal Meeting")}
+                          title="Next Action Plan"
+                        >
+                          <i className="bi bi-ticket-perforated"></i>NAP
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-action"
+                        onClick={() => handleAction(lead)}
+                        title="Update Step 5"
+                      >
+                        <i className="bi bi-pencil-square"></i>Action
                       </button>
-                    )}
-                    {onNextAction && (
-                      <button className="btn btn-nap" onClick={() => onNextAction(lead, "FMS", "Step 5: Proposal Meeting")} title="Next Action Plan">
-                        <i className="bi bi-ticket-perforated"></i>NAP
-                      </button>
-                    )}
-                    <button className="btn btn-action" onClick={() => handleAction(lead)} title="Update Step 5">
-                      <i className="bi bi-pencil-square"></i>Action
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
-      <Step5Modal show={showModal} lead={selectedLead}
-        onClose={() => { setShowModal(false); setSelectedLead(null); }}
-        onSuccess={handleSuccess} />
-      <FilePreviewModal show={showPreview}
-        onClose={() => { setShowPreview(false); setPreviewLead(null); }}
+
+      <Step5Modal
+        show={showModal}
+        lead={selectedLead}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedLead(null);
+        }}
+        onSuccess={handleSuccess}
+      />
+
+      <FilePreviewModal
+        show={showPreview}
+        onClose={() => {
+          setShowPreview(false);
+          setPreviewLead(null);
+        }}
         files={previewLead ? getAllPreviewFiles(previewLead) : []}
         folderLink={previewLead?.pdfFolder}
-        title={previewLead ? `Files — ${previewLead.clientName} (${previewLead.enqNo})` : "Files"} />
+        title={previewLead ? `Files — ${previewLead.clientName} (${previewLead.enqNo})` : "Files"}
+      />
+
+      {/* ✅ Assign Lead Modal */}
+      <AssignLeadModal
+        show={showAssignModal}
+        onClose={() => {
+          setShowAssignModal(false);
+          setAssignLead(null);
+        }}
+        lead={assignLead}
+        stepName="Step 5: Proposal Meeting"
+        currentUser={currentUser}
+        currentAssignee={assignLead ? latestByEnq[assignLead.enqNo]?.assignedTo : ""}
+      />
     </div>
   );
 }

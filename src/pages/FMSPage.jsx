@@ -4,20 +4,21 @@ import Step3 from "./fms/steps/Step3.jsx";
 import Step4 from "./fms/steps/step4.jsx";
 import Step5 from "./fms/steps/Step5.jsx";
 import Step6 from "./fms/steps/step6.jsx";
-import ProposalHold from "./fms/steps/ProposalHold.jsx";  // ✅ NEW IMPORT
+import ProposalHold from "./fms/steps/ProposalHold.jsx";
 import Step7 from "./fms/steps/step7.jsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api.js";
 import Step1 from "./fms/steps/Step1.jsx";
+// ✅ Assign Lead Modal import
+import AssignLeadModal from "../components/AssignLeadModal.jsx";
 
-// ✅ UPDATED: Added Proposal Hold between Follow Up and Agreement
 const FMS_STEPS = [
   { id: 2, label: "Document Upload", icon: "bi-cloud-upload" },
   { id: 3, label: "Need Analysis Meeting", icon: "bi-people" },
   { id: 4, label: "Proposal Preparation", icon: "bi-clipboard-data" },
   { id: 5, label: "Proposal Meeting", icon: "bi-file-earmark-check" },
   { id: 6, label: "Follow Up", icon: "bi-arrow-repeat" },
-  { id: 8, label: "Proposal Hold", icon: "bi-pause-circle" },  // ✅ NEW (id: 8)
+  { id: 8, label: "Proposal Hold", icon: "bi-pause-circle" },
   { id: 7, label: "Agreement", icon: "bi-handshake" },
 ];
 
@@ -37,7 +38,15 @@ export default function FMSPage({ currentUser, onNextAction }) {
   const [selectedLead, setSelectedLead] = useState(null);
   const [showStep2Modal, setShowStep2Modal] = useState(false);
   const [search, setSearch] = useState("");
+
+  // ✅ Assign Lead states
+  const [assignLead, setAssignLead] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const queryClient = useQueryClient();
+
+  // ✅ Admin check
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
 
   const { data: step2Data, isLoading: step2Loading, error: step2Error } = useQuery({
     queryKey: ["fms-step2"],
@@ -46,6 +55,17 @@ export default function FMSPage({ currentUser, onNextAction }) {
     staleTime: 30000,
   });
 
+  // ✅ Fetch latest assignments map
+  const { data: latestData } = useQuery({
+    queryKey: ["assignment-latest"],
+    queryFn: async () => {
+      const res = await api.get("/lead-assignment/latest");
+      return res.data.latestByEnq || {};
+    },
+    staleTime: 30000,
+  });
+
+  const latestByEnq = latestData || {};
   const step2Leads = step2Data?.leads || [];
 
   const filteredStep2Leads = step2Leads.filter((lead) => {
@@ -62,6 +82,12 @@ export default function FMSPage({ currentUser, onNextAction }) {
   const handleStep2Action = (lead) => {
     setSelectedLead(lead);
     setShowStep2Modal(true);
+  };
+
+  // ✅ Assign click handler
+  const handleAssignClick = (lead) => {
+    setAssignLead(lead);
+    setShowAssignModal(true);
   };
 
   const handleStep2Success = () => {
@@ -88,12 +114,17 @@ export default function FMSPage({ currentUser, onNextAction }) {
                   onChange={(e) => setSearch(e.target.value)}
                 />
                 {search && (
-                  <button className="search-clear" onClick={() => setSearch("")}>
+                  <button
+                    className="search-clear"
+                    onClick={() => setSearch("")}
+                  >
                     <i className="bi bi-x"></i>
                   </button>
                 )}
               </div>
-              <span className="result-count">{filteredStep2Leads.length} leads</span>
+              <span className="result-count">
+                {filteredStep2Leads.length} leads
+              </span>
             </div>
 
             {step2Error && (
@@ -119,35 +150,100 @@ export default function FMSPage({ currentUser, onNextAction }) {
                       {STEP2_COLUMNS.map((col) => (
                         <th key={col.key}>{col.label}</th>
                       ))}
+                      {/* ✅ Assigned To column header */}
+                      <th>Assigned To</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStep2Leads.map((lead) => (
-                      <tr key={lead.enqNo}>
-                        {STEP2_COLUMNS.map((col) => (
-                          <td key={col.key}>{lead[col.key] || "—"}</td>
-                        ))}
-                        <td className="actions-cell">
-                          {onNextAction && (
-                            <button
-                              className="btn btn-nap"
-                              onClick={() =>
-                                onNextAction(lead, "FMS", "Document Upload")
-                              }
+                    {filteredStep2Leads.map((lead) => {
+                      // ✅ Get assigned user for this lead
+                      const assignedTo =
+                        latestByEnq[lead.enqNo]?.assignedTo || "";
+                      return (
+                        <tr key={lead.enqNo}>
+                          {STEP2_COLUMNS.map((col) => (
+                            <td key={col.key}>{lead[col.key] || "—"}</td>
+                          ))}
+
+                          {/* ✅ Assigned To cell */}
+                          <td>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                cursor: isAdmin ? "pointer" : "default",
+                              }}
+                              onClick={(e) => {
+                                if (isAdmin) {
+                                  e.stopPropagation();
+                                  handleAssignClick(lead);
+                                }
+                              }}
                             >
-                              NAP
+                              {assignedTo ? (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    padding: "3px 8px",
+                                    background: "rgba(99, 102, 241, 0.1)",
+                                    borderRadius: 6,
+                                    color: "#6366f1",
+                                    fontWeight: 600,
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  <i className="bi bi-person-check"></i>
+                                  {assignedTo}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    color: "#9ca3af",
+                                    fontStyle: "italic",
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  Unassigned
+                                </span>
+                              )}
+                              {isAdmin && (
+                                <i
+                                  className="bi bi-pencil-square"
+                                  style={{ fontSize: 12, color: "#6b7280" }}
+                                ></i>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="actions-cell">
+                            {onNextAction && (
+                              <button
+                                className="btn btn-nap"
+                                onClick={() =>
+                                  onNextAction(
+                                    lead,
+                                    "FMS",
+                                    "Document Upload"
+                                  )
+                                }
+                              >
+                                NAP
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-action"
+                              onClick={() => handleStep2Action(lead)}
+                            >
+                              Action
                             </button>
-                          )}
-                          <button
-                            className="btn btn-action"
-                            onClick={() => handleStep2Action(lead)}
-                          >
-                            Action
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -163,11 +259,10 @@ export default function FMSPage({ currentUser, onNextAction }) {
         return <Step5 currentUser={currentUser} onNextAction={onNextAction} />;
       case 6:
         return <Step6 currentUser={currentUser} onNextAction={onNextAction} />;
-
-      // ✅ NEW CASE
       case 8:
-        return <ProposalHold currentUser={currentUser} onNextAction={onNextAction} />;
-
+        return (
+          <ProposalHold currentUser={currentUser} onNextAction={onNextAction} />
+        );
       case 7:
         return <Step7 currentUser={currentUser} onNextAction={onNextAction} />;
       default:
@@ -204,8 +299,9 @@ export default function FMSPage({ currentUser, onNextAction }) {
             }}
           >
             <i className={`bi ${step.icon}`} style={{ marginRight: 6 }}></i>
-            {/* Proposal Hold doesn't get step number */}
-            {step.id === 8 ? step.label : `Step ${index + 1}: ${step.label}`}
+            {step.id === 8
+              ? step.label
+              : `Step ${index + 1}: ${step.label}`}
           </button>
         ))}
       </div>
@@ -220,6 +316,21 @@ export default function FMSPage({ currentUser, onNextAction }) {
           setSelectedLead(null);
         }}
         onSuccess={handleStep2Success}
+      />
+
+      {/* ✅ Assign Lead Modal */}
+      <AssignLeadModal
+        show={showAssignModal}
+        onClose={() => {
+          setShowAssignModal(false);
+          setAssignLead(null);
+        }}
+        lead={assignLead}
+        stepName="Step 2: Document Upload"
+        currentUser={currentUser}
+        currentAssignee={
+          assignLead ? latestByEnq[assignLead.enqNo]?.assignedTo : ""
+        }
       />
     </div>
   );

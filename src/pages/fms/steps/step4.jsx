@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import AssignLeadModal from "../../../components/AssignLeadModal.jsx";
 import { toast } from "react-toastify";
 import api from "../../../api.js";
 import FilePreviewModal from "../../../components/Filepreviewmodal.jsx";
@@ -501,7 +502,6 @@ function Step4Modal({ show, lead, onClose, onSuccess }) {
         nextStepPlanned: nextStepPlanned.trim() || null,
       });
       if (res.data.success) {
-        // Save remark on submit
         const remarkText = remarksRef.current?.getRemarkText() || "";
         if (remarkText.trim()) {
           await remarksRef.current.saveRemark(remarkText);
@@ -819,7 +819,6 @@ function Step4Modal({ show, lead, onClose, onSuccess }) {
               </small>
             </div>
 
-            {/* Remarks Section */}
             <RemarksSection
               ref={remarksRef}
               enqNo={lead.enqNo}
@@ -887,14 +886,35 @@ export default function Step4({ currentUser, onNextAction }) {
   const [showModal, setShowModal] = useState(false);
   const [previewLead, setPreviewLead] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  // ✅ Assign Lead states
+  const [assignLead, setAssignLead] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const queryClient = useQueryClient();
+
+  // ✅ Admin check
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["fms-step4"],
     queryFn: () => api.get("/fms/step4").then((r) => r.data),
     staleTime: 30000,
   });
+
+  // ✅ Fetch latest assignments map
+  const { data: latestData } = useQuery({
+    queryKey: ["assignment-latest"],
+    queryFn: async () => {
+      const res = await api.get("/lead-assignment/latest");
+      return res.data.latestByEnq || {};
+    },
+    staleTime: 30000,
+  });
+
+  const latestByEnq = latestData || {};
   const leads = data?.leads || [];
+
   const filteredLeads = leads.filter((lead) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -910,10 +930,18 @@ export default function Step4({ currentUser, onNextAction }) {
     setSelectedLead(lead);
     setShowModal(true);
   };
+
   const handlePreview = (lead) => {
     setPreviewLead(lead);
     setShowPreview(true);
   };
+
+  // ✅ Assign click handler
+  const handleAssignClick = (lead) => {
+    setAssignLead(lead);
+    setShowAssignModal(true);
+  };
+
   const handleSuccess = () => {
     queryClient.invalidateQueries(["fms-step4"]);
     queryClient.invalidateQueries(["fms-step5"]);
@@ -942,12 +970,14 @@ export default function Step4({ currentUser, onNextAction }) {
         </div>
         <span className="result-count">{filteredLeads.length} leads</span>
       </div>
+
       {error && (
         <div className="error-msg">
           <i className="bi bi-exclamation-triangle"></i>Failed to load:{" "}
           {error.message}
         </div>
       )}
+
       {isLoading ? (
         <div className="loading">
           <div className="spinner"></div>
@@ -970,50 +1000,115 @@ export default function Step4({ currentUser, onNextAction }) {
                 {STEP4_COLUMNS.map((col) => (
                   <th key={col.key}>{col.label}</th>
                 ))}
+                {/* ✅ Assigned To column header */}
+                <th>Assigned To</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => (
-                <tr key={lead.enqNo}>
-                  {STEP4_COLUMNS.map((col) => (
-                    <td key={col.key}>{lead[col.key] || "—"}</td>
-                  ))}
-                  <td className="actions-cell">
-                    {lead.pdfFolder && (
-                      <button
-                        className="btn btn-folder"
-                        onClick={() => handlePreview(lead)}
-                        title="Preview Files"
+              {filteredLeads.map((lead) => {
+                // ✅ Get assigned user for this lead
+                const assignedTo = latestByEnq[lead.enqNo]?.assignedTo || "";
+                return (
+                  <tr key={lead.enqNo}>
+                    {STEP4_COLUMNS.map((col) => (
+                      <td key={col.key}>{lead[col.key] || "—"}</td>
+                    ))}
+
+                    {/* ✅ Assigned To cell */}
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          cursor: isAdmin ? "pointer" : "default",
+                        }}
+                        onClick={(e) => {
+                          if (isAdmin) {
+                            e.stopPropagation();
+                            handleAssignClick(lead);
+                          }
+                        }}
                       >
-                        <i className="bi bi-eye"></i>
-                      </button>
-                    )}
-                    {onNextAction && (
+                        {assignedTo ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              padding: "3px 8px",
+                              background: "rgba(99, 102, 241, 0.1)",
+                              borderRadius: 6,
+                              color: "#6366f1",
+                              fontWeight: 600,
+                              fontSize: 12,
+                            }}
+                          >
+                            <i className="bi bi-person-check"></i>
+                            {assignedTo}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                              fontSize: 12,
+                            }}
+                          >
+                            Unassigned
+                          </span>
+                        )}
+                        {isAdmin && (
+                          <i
+                            className="bi bi-pencil-square"
+                            style={{ fontSize: 12, color: "#6b7280" }}
+                          ></i>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="actions-cell">
+                      {lead.pdfFolder && (
+                        <button
+                          className="btn btn-folder"
+                          onClick={() => handlePreview(lead)}
+                          title="Preview Files"
+                        >
+                          <i className="bi bi-eye"></i>
+                        </button>
+                      )}
+                      {onNextAction && (
+                        <button
+                          className="btn btn-nap"
+                          onClick={() =>
+                            onNextAction(
+                              lead,
+                              "FMS",
+                              "Step 4: Conceptual Plan",
+                            )
+                          }
+                          title="Next Action Plan"
+                        >
+                          <i className="bi bi-ticket-perforated"></i>NAP
+                        </button>
+                      )}
                       <button
-                        className="btn btn-nap"
-                        onClick={() =>
-                          onNextAction(lead, "FMS", "Step 4: Conceptual Plan")
-                        }
-                        title="Next Action Plan"
+                        className="btn btn-action"
+                        onClick={() => handleAction(lead)}
+                        title="Update Step 4"
                       >
-                        <i className="bi bi-ticket-perforated"></i>NAP
+                        <i className="bi bi-pencil-square"></i>Action
                       </button>
-                    )}
-                    <button
-                      className="btn btn-action"
-                      onClick={() => handleAction(lead)}
-                      title="Update Step 4"
-                    >
-                      <i className="bi bi-pencil-square"></i>Action
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
       <Step4Modal
         show={showModal}
         lead={selectedLead}
@@ -1023,6 +1118,7 @@ export default function Step4({ currentUser, onNextAction }) {
         }}
         onSuccess={handleSuccess}
       />
+
       <FilePreviewModal
         show={showPreview}
         onClose={() => {
@@ -1035,6 +1131,21 @@ export default function Step4({ currentUser, onNextAction }) {
           previewLead
             ? `Files — ${previewLead.clientName} (${previewLead.enqNo})`
             : "Files"
+        }
+      />
+
+      {/* ✅ Assign Lead Modal */}
+      <AssignLeadModal
+        show={showAssignModal}
+        onClose={() => {
+          setShowAssignModal(false);
+          setAssignLead(null);
+        }}
+        lead={assignLead}
+        stepName="Step 4: Conceptual Plan"
+        currentUser={currentUser}
+        currentAssignee={
+          assignLead ? latestByEnq[assignLead.enqNo]?.assignedTo : ""
         }
       />
     </div>

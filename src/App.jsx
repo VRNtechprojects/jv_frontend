@@ -13,6 +13,7 @@ import NextActionModal from "./components/NextActionModal";
 import NotificationPanel from "./components/NotificationPanel";
 import TicketUpdateModal from "./components/TicketUpdateModal";
 import SiteVisitPage from "./pages/SiteVisitPage.jsx";
+import LeadAssignmentPage from "./pages/LeadAssignmentPage.jsx";
 
 const ALL_TABS = [
   {
@@ -46,6 +47,12 @@ const ALL_TABS = [
     label: "Site Visit",
     icon: "bi-geo-alt",
     sheetName: "SITE VIST FMS",
+  },
+  {
+    id: "lead-assignment",
+    label: "Lead Assignment",
+    icon: "bi-person-badge",
+    sheetName: "ASSIGNMENT LOGGER",
   },
 ];
 
@@ -217,6 +224,8 @@ export default function App() {
         return (
           <SiteVisitPage currentUser={user} onNextAction={handleNextAction} />
         );
+      case "lead-assignment":
+        return <LeadAssignmentPage currentUser={user} />;
       default:
         return visibleTabs.length > 0 ? (
           <div className="empty-state">

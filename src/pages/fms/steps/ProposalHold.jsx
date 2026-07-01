@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import api from "../../../api.js";
 import FilePreviewModal from "../../../components/Filepreviewmodal.jsx";
 import RemarksSection from "../../../components/Remarkssection.jsx";
+import AssignLeadModal from "../../../components/AssignLeadModal.jsx";
 
 const HOLD_COLUMNS = [
   { key: "enqNo", label: "EnQ No" },
@@ -17,7 +18,6 @@ const HOLD_COLUMNS = [
   { key: "step6FollowCounter", label: "Follow Up #" },
 ];
 
-// ✅ 3 actions: Move to Follow Up, Cold Lead, Not Qualified
 const ACTION_OPTIONS = [
   { value: "Move to Follow Up", label: "Move to Follow Up", icon: "bi-arrow-repeat", color: "#22c55e" },
   { value: "Cold Lead", label: "Cold Lead", icon: "bi-snow2", color: "#3b82f6" },
@@ -178,7 +178,6 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
       return;
     }
 
-    // Confirm for destructive actions
     if (action === "Cold Lead" || action === "Not Qualified Lead") {
       const dest = action === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads";
       if (!window.confirm(`Move this lead to ${dest}? This will remove it permanently.`)) return;
@@ -242,14 +241,14 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
             </h3>
             <button
               style={{ ...styles.closeBtn, ...(submitting && styles.btnDisabled) }}
-              onClick={handleClose} disabled={submitting}
+              onClick={handleClose}
+              disabled={submitting}
             >
               &times;
             </button>
           </div>
 
           <div style={styles.modalBody}>
-            {/* Lead Info */}
             <div style={styles.leadInfoCard}>
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>EnQ No:</span>
@@ -270,7 +269,9 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>Follow-up Count:</span>
                 <span style={styles.infoValue}>
-                  <span style={styles.followCounterBadge}>{lead.step6FollowCounter || "0"}</span>
+                  <span style={styles.followCounterBadge}>
+                    {lead.step6FollowCounter || "0"}
+                  </span>
                 </span>
               </div>
               <div style={lead.pdfFolder ? styles.infoRow : styles.infoRowLast}>
@@ -285,7 +286,12 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
                 <div style={styles.infoRowLast}>
                   <span style={styles.infoLabel}>Folder:</span>
                   <span style={styles.infoValue}>
-                    <a href={lead.pdfFolder} target="_blank" rel="noopener noreferrer" style={styles.folderLink}>
+                    <a
+                      href={lead.pdfFolder}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={styles.folderLink}
+                    >
                       <i className="bi bi-folder2-open"></i> Open Drive Folder
                     </a>
                   </span>
@@ -293,7 +299,7 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
               )}
             </div>
 
-            {/* ✅ Action Selection */}
+            {/* Action Selection */}
             <div style={styles.formGroup}>
               <label style={styles.label}>
                 <i className="bi bi-flag"></i>Action
@@ -328,7 +334,9 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
                   onChange={(e) => setPlannedOverride(e.target.value)}
                   disabled={submitting}
                 />
-                <small style={styles.formHint}>Leave empty to keep the existing planned date</small>
+                <small style={styles.formHint}>
+                  Leave empty to keep the existing planned date
+                </small>
               </div>
             )}
 
@@ -346,7 +354,10 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
                 <i className="bi bi-exclamation-triangle" style={styles.warningIcon}></i>
                 <span>
                   This will move the lead to{" "}
-                  <strong>{action === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads"}</strong> and remove it permanently.
+                  <strong>
+                    {action === "Cold Lead" ? "Cold Leads" : "Not Qualified Leads"}
+                  </strong>{" "}
+                  and remove it permanently.
                 </span>
               </div>
             )}
@@ -355,12 +366,16 @@ function ProposalHoldModal({ show, lead, onClose, onSuccess }) {
           <div style={styles.modalFooter}>
             <button
               style={{ ...styles.btnCancel, ...(submitting && styles.btnDisabled) }}
-              onClick={handleClose} disabled={submitting}
+              onClick={handleClose}
+              disabled={submitting}
             >
               Cancel
             </button>
             <button
-              style={{ ...styles.btnPrimary, ...((submitting || !action) && styles.btnDisabled) }}
+              style={{
+                ...styles.btnPrimary,
+                ...((submitting || !action) && styles.btnDisabled),
+              }}
               onClick={handleSubmit}
               disabled={submitting || !action}
             >
@@ -384,7 +399,15 @@ export default function ProposalHold({ currentUser, onNextAction }) {
   const [showModal, setShowModal] = useState(false);
   const [previewLead, setPreviewLead] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  // ✅ Assign Lead states
+  const [assignLead, setAssignLead] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const queryClient = useQueryClient();
+
+  // ✅ Admin check
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["fms-proposal-hold"],
@@ -392,6 +415,17 @@ export default function ProposalHold({ currentUser, onNextAction }) {
     staleTime: 30000,
   });
 
+  // ✅ Fetch latest assignments map
+  const { data: latestData } = useQuery({
+    queryKey: ["assignment-latest"],
+    queryFn: async () => {
+      const res = await api.get("/lead-assignment/latest");
+      return res.data.latestByEnq || {};
+    },
+    staleTime: 30000,
+  });
+
+  const latestByEnq = latestData || {};
   const leads = data?.leads || [];
 
   const filteredLeads = leads.filter((lead) => {
@@ -405,8 +439,21 @@ export default function ProposalHold({ currentUser, onNextAction }) {
     );
   });
 
-  const handleAction = (lead) => { setSelectedLead(lead); setShowModal(true); };
-  const handlePreview = (lead) => { setPreviewLead(lead); setShowPreview(true); };
+  const handleAction = (lead) => {
+    setSelectedLead(lead);
+    setShowModal(true);
+  };
+
+  const handlePreview = (lead) => {
+    setPreviewLead(lead);
+    setShowPreview(true);
+  };
+
+  // ✅ Assign click handler
+  const handleAssignClick = (lead) => {
+    setAssignLead(lead);
+    setShowAssignModal(true);
+  };
 
   // ✅ Invalidate all relevant queries
   const handleSuccess = () => {
@@ -428,8 +475,13 @@ export default function ProposalHold({ currentUser, onNextAction }) {
       <div className="filter-bar">
         <div className="search-box">
           <i className="bi bi-search"></i>
-          <input type="text" className="filter-input" placeholder="Search by EnQ No, client, location..."
-            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Search by EnQ No, client, location..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           {search && (
             <button className="search-clear" onClick={() => setSearch("")}>
               <i className="bi bi-x"></i>
@@ -441,70 +493,184 @@ export default function ProposalHold({ currentUser, onNextAction }) {
 
       {error && (
         <div className="error-msg">
-          <i className="bi bi-exclamation-triangle"></i>Failed to load: {error.message}
+          <i className="bi bi-exclamation-triangle"></i>Failed to load:{" "}
+          {error.message}
         </div>
       )}
 
       {isLoading ? (
-        <div className="loading"><div className="spinner"></div><span>Loading Proposal Hold leads...</span></div>
+        <div className="loading">
+          <div className="spinner"></div>
+          <span>Loading Proposal Hold leads...</span>
+        </div>
       ) : filteredLeads.length === 0 ? (
         <div className="empty-state">
           <i className="bi bi-inbox"></i>
           <p>No leads on Hold</p>
-          <small>Leads will appear here when put on Hold from Follow Up step</small>
+          <small>
+            Leads will appear here when put on Hold from Follow Up step
+          </small>
         </div>
       ) : (
         <div className="table-wrapper">
           <table className="lead-table">
             <thead>
               <tr>
-                {HOLD_COLUMNS.map((col) => (<th key={col.key}>{col.label}</th>))}
+                {HOLD_COLUMNS.map((col) => (
+                  <th key={col.key}>{col.label}</th>
+                ))}
+                {/* ✅ Assigned To column header */}
+                <th>Assigned To</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => (
-                <tr key={lead.enqNo}>
-                  {HOLD_COLUMNS.map((col) => (
-                    <td key={col.key}>
-                      {col.key === "step6FollowCounter" ? (
-                        <span style={followCounterBadgeStyle}>{lead[col.key] || "0"}</span>
-                      ) : (
-                        lead[col.key] || "—"
-                      )}
+              {filteredLeads.map((lead) => {
+                // ✅ Get assigned user for this lead
+                const assignedTo = latestByEnq[lead.enqNo]?.assignedTo || "";
+                return (
+                  <tr key={lead.enqNo}>
+                    {HOLD_COLUMNS.map((col) => (
+                      <td key={col.key}>
+                        {col.key === "step6FollowCounter" ? (
+                          <span style={followCounterBadgeStyle}>
+                            {lead[col.key] || "0"}
+                          </span>
+                        ) : (
+                          lead[col.key] || "—"
+                        )}
+                      </td>
+                    ))}
+
+                    {/* ✅ Assigned To cell */}
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          cursor: isAdmin ? "pointer" : "default",
+                        }}
+                        onClick={(e) => {
+                          if (isAdmin) {
+                            e.stopPropagation();
+                            handleAssignClick(lead);
+                          }
+                        }}
+                      >
+                        {assignedTo ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              padding: "3px 8px",
+                              background: "rgba(99, 102, 241, 0.1)",
+                              borderRadius: 6,
+                              color: "#6366f1",
+                              fontWeight: 600,
+                              fontSize: 12,
+                            }}
+                          >
+                            <i className="bi bi-person-check"></i>
+                            {assignedTo}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                              fontSize: 12,
+                            }}
+                          >
+                            Unassigned
+                          </span>
+                        )}
+                        {isAdmin && (
+                          <i
+                            className="bi bi-pencil-square"
+                            style={{ fontSize: 12, color: "#6b7280" }}
+                          ></i>
+                        )}
+                      </div>
                     </td>
-                  ))}
-                  <td className="actions-cell">
-                    {lead.pdfFolder && (
-                      <button className="btn btn-folder" onClick={() => handlePreview(lead)} title="Preview Files">
-                        <i className="bi bi-eye"></i>
+
+                    <td className="actions-cell">
+                      {lead.pdfFolder && (
+                        <button
+                          className="btn btn-folder"
+                          onClick={() => handlePreview(lead)}
+                          title="Preview Files"
+                        >
+                          <i className="bi bi-eye"></i>
+                        </button>
+                      )}
+                      {onNextAction && (
+                        <button
+                          className="btn btn-nap"
+                          onClick={() =>
+                            onNextAction(lead, "FMS", "Proposal Hold")
+                          }
+                          title="Next Action Plan"
+                        >
+                          <i className="bi bi-ticket-perforated"></i>NAP
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-action"
+                        onClick={() => handleAction(lead)}
+                        title="Manage Hold"
+                      >
+                        <i className="bi bi-pencil-square"></i>Action
                       </button>
-                    )}
-                    {onNextAction && (
-                      <button className="btn btn-nap" onClick={() => onNextAction(lead, "FMS", "Proposal Hold")} title="Next Action Plan">
-                        <i className="bi bi-ticket-perforated"></i>NAP
-                      </button>
-                    )}
-                    <button className="btn btn-action" onClick={() => handleAction(lead)} title="Manage Hold">
-                      <i className="bi bi-pencil-square"></i>Action
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      <ProposalHoldModal show={showModal} lead={selectedLead}
-        onClose={() => { setShowModal(false); setSelectedLead(null); }}
-        onSuccess={handleSuccess} />
+      <ProposalHoldModal
+        show={showModal}
+        lead={selectedLead}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedLead(null);
+        }}
+        onSuccess={handleSuccess}
+      />
 
-      <FilePreviewModal show={showPreview}
-        onClose={() => { setShowPreview(false); setPreviewLead(null); }}
+      <FilePreviewModal
+        show={showPreview}
+        onClose={() => {
+          setShowPreview(false);
+          setPreviewLead(null);
+        }}
         files={previewLead ? getPreviewFiles(previewLead) : []}
         folderLink={previewLead?.pdfFolder}
-        title={previewLead ? `Files — ${previewLead.clientName} (${previewLead.enqNo})` : "Files"} />
+        title={
+          previewLead
+            ? `Files — ${previewLead.clientName} (${previewLead.enqNo})`
+            : "Files"
+        }
+      />
+
+      {/* ✅ Assign Lead Modal */}
+      <AssignLeadModal
+        show={showAssignModal}
+        onClose={() => {
+          setShowAssignModal(false);
+          setAssignLead(null);
+        }}
+        lead={assignLead}
+        stepName="Proposal Hold"
+        currentUser={currentUser}
+        currentAssignee={
+          assignLead ? latestByEnq[assignLead.enqNo]?.assignedTo : ""
+        }
+      />
     </div>
   );
 }
