@@ -19,6 +19,12 @@ const STEP4_COLUMNS = [
 ];
 
 const STATUS_OPTIONS = [
+  {
+    value: "Proposal on Progress",
+    label: "Proposal on Progress",
+    icon: "bi-arrow-repeat",
+    color: "#f59e0b",
+  },
   { value: "Done", label: "Done", icon: "bi-check-circle", color: "#22c55e" },
   {
     value: "Cold Lead",
@@ -294,7 +300,7 @@ const styles = {
   },
   statusOptions: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
+    gridTemplateColumns: "repeat(3, 1fr)", // Changed from 2 to 3
     gap: "10px",
   },
   statusOption: {
@@ -826,21 +832,47 @@ function Step4Modal({ show, lead, onClose, onSuccess }) {
               disabled={isProcessing}
             />
 
-            {status && status !== "Done" && (
-              <div style={styles.warningBox}>
-                <i
-                  className="bi bi-exclamation-triangle"
-                  style={styles.warningIcon}
-                ></i>
+            {status === "Proposal on Progress" && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  padding: "12px 16px",
+                  backgroundColor: "rgba(245, 158, 11, 0.1)",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  borderRadius: "8px",
+                  marginTop: "16px",
+                  color: "#b45309",
+                  fontSize: "14px",
+                }}
+              >
+                <i className="bi bi-info-circle" style={styles.warningIcon}></i>
                 <span>
-                  This will move the lead to{" "}
-                  <strong>
-                    {status === "Back to Pipeline" ? "Pipeline" : status}
-                  </strong>{" "}
-                  and remove it from FMS.
+                  Actual timestamp will be updated. Lead will{" "}
+                  <strong>stay in Step 4</strong> for further updates (audit
+                  trail).
                 </span>
               </div>
             )}
+
+            {status &&
+              status !== "Done" &&
+              status !== "Proposal on Progress" && (
+                <div style={styles.warningBox}>
+                  <i
+                    className="bi bi-exclamation-triangle"
+                    style={styles.warningIcon}
+                  ></i>
+                  <span>
+                    This will move the lead to{" "}
+                    <strong>
+                      {status === "Back to Pipeline" ? "Pipeline" : status}
+                    </strong>{" "}
+                    and remove it from FMS.
+                  </span>
+                </div>
+              )}
           </div>
 
           <div style={styles.modalFooter}>
@@ -1082,11 +1114,7 @@ export default function Step4({ currentUser, onNextAction }) {
                         <button
                           className="btn btn-nap"
                           onClick={() =>
-                            onNextAction(
-                              lead,
-                              "FMS",
-                              "Step 4: Conceptual Plan",
-                            )
+                            onNextAction(lead, "FMS", "Step 4: Conceptual Plan")
                           }
                           title="Next Action Plan"
                         >
